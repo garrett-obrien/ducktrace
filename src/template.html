@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <style>
+    /* CSS Variables - mviz light theme */
+    :root {
+      --background: #f8f8f8;
+      --paper: #ffffff;
+      --text: #231f20;
+      --text-muted: #6a6a6a;
+      --primary: #0777b3;
+      --primary-light: rgba(7, 119, 179, 0.15);
+      --border: #d4d4d4;
+      --font-sans: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      --font-mono: 'Consolas', 'Monaco', monospace;
+    }
+
+    /* Reset & Base */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--background);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* Main Container */
+    .main-container {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+
+    /* Chart Container */
+    .chart-container {
+      background: var(--paper);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      padding: 24px;
+      width: 648px;
+      position: relative;
+      z-index: 2;
+      transition: border-radius 0.3s ease;
+    }
+
+    .main-container.explain-open .chart-container {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+
+    .chart-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    /* SVG Chart */
+    .chart-svg {
+      display: block;
+      overflow: visible;
+    }
+
+    .chart-line {
+      fill: none;
+      stroke: var(--primary);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .chart-area {
+      fill: var(--primary-light);
+    }
+
+    .chart-point {
+      fill: var(--paper);
+      stroke: var(--primary);
+      stroke-width: 2;
+      cursor: pointer;
+      transition: r 0.15s ease, stroke-width 0.15s ease;
+    }
+
+    .chart-point:hover {
+      r: 6;
+      stroke-width: 3;
+    }
+
+    .chart-point.selected {
+      fill: #fbbf24;
+      stroke: #f59e0b;
+      r: 7;
+      stroke-width: 3;
+    }
+
+    .chart-point.hover-highlight {
+      fill: var(--primary);
+      r: 6;
+      stroke-width: 3;
+    }
+
+    /* Connector line from table to chart */
+    .connector-line {
+      stroke: #dc2626;
+      stroke-width: 2;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+    }
+
+    .connector-line.visible {
+      opacity: 1;
+    }
+
+    /* Hover label above chart point */
+    .hover-label {
+      position: fixed;
+      background: var(--text);
+      color: var(--paper);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 8px;
+      border-radius: 4px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateX(-50%) translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 60;
+      white-space: nowrap;
+    }
+
+    .hover-label.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .hover-label::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--text);
+    }
+
+    .axis-line {
+      stroke: var(--border);
+      stroke-width: 1;
+    }
+
+    .axis-label {
+      font-size: 11px;
+      fill: var(--text-muted);
+      font-family: var(--font-sans);
+    }
+
+    .grid-line {
+      stroke: var(--border);
+      stroke-width: 1;
+      stroke-dasharray: 2, 3;
+      opacity: 0.6;
+    }
+
+    /* Tooltip */
+    .tooltip {
+      position: absolute;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 13px;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 100;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .tooltip-label {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+
+    .tooltip-value {
+      color: var(--text);
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    /* Context Menu */
+    .context-menu {
+      position: absolute;
+      background: var(--paper);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+      padding: 4px 0;
+      min-width: 140px;
+      z-index: 200;
+      opacity: 0;
+      transform: scale(0.95);
+      transform-origin: top left;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+      pointer-events: none;
+    }
+
+    .context-menu.visible {
+      opacity: 1;
+      transform: scale(1);
+      pointer-events: auto;
+    }
+
+    .context-menu-item {
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.1s ease;
+    }
+
+    .context-menu-item:hover {
+      background: var(--primary-light);
+    }
+
+    .context-menu-icon {
+      width: 16px;
+      height: 16px;
+      color: var(--primary);
+    }
+
+    /* Explain Panel - slides out from right */
+    .explain-panel {
+      background: var(--paper);
+      border-radius: 0 8px 8px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+      width: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      /* Height matches chart container via align-items: stretch on parent */
+    }
+
+    .main-container.explain-open .explain-panel {
+      width: 420px;
+      opacity: 1;
+    }
+
+    .explain-inner {
+      width: 420px;
+      min-width: 420px;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Explain Header */
+    .explain-header {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .explain-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .explain-close {
+      width: 24px;
+      height: 24px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: background 0.1s ease, color 0.1s ease;
+    }
+
+    .explain-close:hover {
+      background: var(--primary-light);
+      color: var(--text);
+    }
+
+    /* Step Indicators */
+    .step-indicators {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 14px 20px;
+      background: var(--background);
+      flex-shrink: 0;
+    }
+
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .step-indicator.active {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .step-indicator.completed {
+      color: var(--text-muted);
+    }
+
+    .step-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .step-indicator.active .step-dot {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: var(--paper);
+    }
+
+    .step-indicator.completed .step-dot {
+      background: var(--primary-light);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    .step-arrow {
+      color: var(--border);
+      font-size: 12px;
+    }
+
+    /* Explain Content */
+    .explain-content {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* SQL View */
+    .sql-view {
+      background: var(--background);
+      border-radius: 6px;
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      border: 1px solid var(--border);
+      height: 240px;
+      overflow-y: auto;
+    }
+
+    .sql-keyword {
+      color: var(--primary);
+      font-weight: 500;
+    }
+
+    .sql-string {
+      color: #2d7a00;
+    }
+
+    .sql-number {
+      color: #bd4e35;
+    }
+
+    /* Masking View */
+    .masking-view {
+      background: var(--background);
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      height: 240px;
+      overflow-y: auto;
+    }
+
+    .masking-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 14px;
+    }
+
+    .masking-columns {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .masking-column {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--paper);
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    .masking-column.masked {
+      opacity: 0.5;
+      text-decoration: line-through;
+    }
+
+    .masking-column-name {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      flex: 1;
+    }
+
+    .masking-column-role {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--paper);
+      background: var(--primary);
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+
+    .masking-column.masked .masking-column-role {
+      display: none;
+    }
+
+    /* Table View */
+    .data-table-container {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      height: 240px;
+      overflow-y: auto;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .data-table th {
+      background: var(--background);
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+    }
+
+    .data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono);
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tbody tr {
+      cursor: pointer;
+      transition: background 0.1s ease;
+    }
+
+    .data-table tbody tr:hover {
+      background: var(--primary-light);
+    }
+
+    .data-table tr.highlighted {
+      background: var(--primary-light);
+    }
+
+    .data-table tr.highlighted td {
+      font-weight: 600;
+    }
+
+    /* Explain Footer */
+    .explain-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      font-family: var(--font-sans);
+    }
+
+    .btn-secondary {
+      background: var(--paper);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      background: var(--background);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border: 1px solid var(--primary);
+      color: var(--paper);
+    }
+
+    .btn-primary:hover {
+      background: #065a8c;
+      border-color: #065a8c;
+    }
+
+    /* Step Content Transitions */
+    .step-content {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .step-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateX(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Main Container -->
+  <div class="main-container" id="main-container">
+    <!-- Chart Container -->
+    <div class="chart-container">
+      <div class="chart-title">{{TITLE}}</div>
+      <svg class="chart-svg" width="600" height="300" id="chart"></svg>
+    </div>
+
+    <!-- Explain Panel (slides out) -->
+    <div class="explain-panel" id="explain-panel">
+      <div class="explain-inner">
+        <div class="explain-header">
+          <div class="explain-title">Explain Value</div>
+          <button class="explain-close" id="explain-close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="step-indicators">
+          <div class="step-indicator active" id="step-1-indicator">
+            <div class="step-dot">1</div>
+            <span>Query</span>
+          </div>
+          <span class="step-arrow">→</span>
+          <div class="step-indicator" id="step-2-indicator">
+            <div class="step-dot">2</div>
+            <span>Mask</span>
+          </div>
+          <span class="step-arrow">→</span>
+          <div class="step-indicator" id="step-3-indicator">
+            <div class="step-dot">3</div>
+            <span>Data</span>
+          </div>
+          <span class="step-arrow">→</span>
+          <div class="step-indicator" id="step-4-indicator">
+            <div class="step-dot">4</div>
+            <span>Value</span>
+          </div>
+        </div>
+
+        <div class="explain-content">
+          <!-- Step 1: SQL Query -->
+          <div class="step-content active" id="step-1-content">
+            <div class="sql-view" id="sql-view"></div>
+          </div>
+
+          <!-- Step 2: Column Masking -->
+          <div class="step-content" id="step-2-content">
+            <div class="masking-view">
+              <div class="masking-title">Column Selection</div>
+              <div class="masking-columns" id="masking-columns"></div>
+            </div>
+          </div>
+
+          <!-- Step 3: Data Table -->
+          <div class="step-content" id="step-3-content">
+            <div class="data-table-container">
+              <table class="data-table" id="data-table"></table>
+            </div>
+          </div>
+
+          <!-- Step 4: Highlighted Value -->
+          <div class="step-content" id="step-4-content">
+            <div class="data-table-container">
+              <table class="data-table" id="data-table-highlight"></table>
+            </div>
+          </div>
+        </div>
+
+        <div class="explain-footer">
+          <button class="btn btn-secondary" id="btn-back" style="display: none;">Back</button>
+          <button class="btn btn-primary" id="btn-next">Next</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tooltip -->
+  <div class="tooltip" id="tooltip">
+    <div class="tooltip-label" id="tooltip-label"></div>
+    <div class="tooltip-value" id="tooltip-value"></div>
+  </div>
+
+  <!-- Connector Line (SVG overlay) -->
+  <svg class="connector-svg" id="connector-svg" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:50;">
+    <line class="connector-line" id="connector-line" x1="0" y1="0" x2="0" y2="0"/>
+  </svg>
+
+  <!-- Hover Label (shows value above point) -->
+  <div class="hover-label" id="hover-label"></div>
+
+  <!-- Context Menu -->
+  <div class="context-menu" id="context-menu">
+    <div class="context-menu-item" id="explain-btn">
+      <svg class="context-menu-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      Explain
+    </div>
+  </div>
+
+  <script>
+    // Data from MCP call
+    const DATA = {{DATA}};
+    const QUERY = {{QUERY}};
+    const X_FIELD = {{X_FIELD}};
+    const Y_FIELD = {{Y_FIELD}};
+
+    // Chart dimensions
+    const WIDTH = 600;
+    const HEIGHT = 300;
+    const MARGIN = { top: 20, right: 24, bottom: 40, left: 60 };
+    const INNER_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
+    const INNER_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
+
+    // State
+    let selectedPointIndex = null;
+    let currentStep = 1;
+    let pointPositions = []; // Store chart point screen positions
+
+    // Format value based on field name
+    function formatValue(value, field) {
+      if (value === null || value === undefined) return '—';
+
+      const fieldLower = field.toLowerCase();
+
+      // Currency detection
+      if (fieldLower.includes('revenue') || fieldLower.includes('price') ||
+          fieldLower.includes('cost') || fieldLower.includes('amount') ||
+          fieldLower.includes('$') || fieldLower.includes('sales')) {
+        return '$' + Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      }
+
+      // Percentage detection
+      if (fieldLower.includes('rate') || fieldLower.includes('percent') || fieldLower.includes('%')) {
+        return Number(value).toFixed(1) + '%';
+      }
+
+      // Number formatting
+      if (typeof value === 'number') {
+        return value.toLocaleString('en-US');
+      }
+
+      return String(value);
+    }
+
+    // Format date for display
+    function formatDate(value) {
+      try {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return String(value);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      } catch {
+        return String(value);
+      }
+    }
+
+    // Format X axis label (shorter)
+    function formatXLabel(value) {
+      try {
+        const date = new Date(value);
+        if (isNaN(date.getTime())) return String(value);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } catch {
+        return String(value);
+      }
+    }
+
+    // Highlight SQL syntax
+    function highlightSQL(sql) {
+      const keywords = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING',
+                       'JOIN', 'LEFT', 'RIGHT', 'INNER', 'OUTER', 'ON', 'AND', 'OR',
+                       'AS', 'DESC', 'ASC', 'LIMIT', 'OFFSET', 'SUM', 'COUNT', 'AVG',
+                       'MIN', 'MAX', 'DISTINCT', 'BETWEEN', 'IN', 'LIKE', 'IS', 'NULL',
+                       'NOT', 'EXISTS', 'CASE', 'WHEN', 'THEN', 'ELSE', 'END', 'CAST',
+                       'UNION', 'ALL', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP',
+                       'ALTER', 'TABLE', 'INDEX', 'VIEW', 'WITH'];
+
+      let result = sql;
+
+      // Highlight strings (single quotes)
+      result = result.replace(/'([^']*)'/g, '<span class="sql-string">\'$1\'</span>');
+
+      // Highlight numbers
+      result = result.replace(/\b(\d+\.?\d*)\b/g, '<span class="sql-number">$1</span>');
+
+      // Highlight keywords (case insensitive)
+      keywords.forEach(kw => {
+        const regex = new RegExp('\\b(' + kw + ')\\b', 'gi');
+        result = result.replace(regex, '<span class="sql-keyword">$1</span>');
+      });
+
+      return result;
+    }
+
+    // Build table HTML - only show x and y columns
+    function buildTable(highlightIndex = null) {
+      const columns = [X_FIELD, Y_FIELD];
+      let html = '<thead><tr>';
+      columns.forEach(col => {
+        html += `<th>${col}</th>`;
+      });
+      html += '</tr></thead><tbody>';
+
+      DATA.forEach((row, i) => {
+        const highlightClass = highlightIndex === i ? ' highlighted' : '';
+        html += `<tr class="data-row${highlightClass}" data-row-index="${i}">`;
+        columns.forEach(col => {
+          const value = col === X_FIELD ? formatDate(row[col]) : formatValue(row[col], col);
+          html += `<td>${value}</td>`;
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody>';
+      return html;
+    }
+
+    // Build masking view HTML
+    function buildMaskingView() {
+      const allColumns = Object.keys(DATA[0] || {});
+      let html = '';
+
+      allColumns.forEach(col => {
+        const isUsed = col === X_FIELD || col === Y_FIELD;
+        const maskedClass = isUsed ? '' : ' masked';
+        let role = '';
+        if (col === X_FIELD) role = 'X Axis';
+        else if (col === Y_FIELD) role = 'Y Axis';
+
+        html += `<div class="masking-column${maskedClass}">`;
+        html += `<span class="masking-column-name">${col}</span>`;
+        if (role) {
+          html += `<span class="masking-column-role">${role}</span>`;
+        }
+        html += '</div>';
+      });
+
+      return html;
+    }
+
+    // Attach hover listeners to table rows
+    function attachTableHoverListeners() {
+      document.querySelectorAll('.data-row').forEach(row => {
+        row.addEventListener('mouseenter', showConnectorLine);
+        row.addEventListener('mouseleave', hideConnectorLine);
+      });
+    }
+
+    // Show connector line from table row to chart point
+    function showConnectorLine(e) {
+      // Only show on step 4 (Value)
+      if (currentStep !== 4) return;
+
+      const rowIndex = parseInt(e.currentTarget.dataset.rowIndex);
+      if (rowIndex === selectedPointIndex) return; // Don't show for selected point
+
+      const row = e.currentTarget;
+      const rowRect = row.getBoundingClientRect();
+
+      // Get point position directly from the circle element
+      const point = document.querySelectorAll('.chart-point')[rowIndex];
+      if (!point) return;
+
+      const svg = document.getElementById('chart');
+      const svgRect = svg.getBoundingClientRect();
+      const cx = parseFloat(point.getAttribute('cx'));
+      const cy = parseFloat(point.getAttribute('cy'));
+
+      const pointX = svgRect.left + cx;
+      const pointY = svgRect.top + cy;
+
+      const line = document.getElementById('connector-line');
+      line.setAttribute('x1', rowRect.left);
+      line.setAttribute('y1', rowRect.top + rowRect.height / 2);
+      line.setAttribute('x2', pointX);
+      line.setAttribute('y2', pointY);
+      line.classList.add('visible');
+
+      // Show value label above point
+      const d = DATA[rowIndex];
+      const hoverLabel = document.getElementById('hover-label');
+      hoverLabel.textContent = formatValue(d[Y_FIELD], Y_FIELD);
+      hoverLabel.style.left = pointX + 'px';
+      hoverLabel.style.top = (pointY - 28) + 'px';
+      hoverLabel.classList.add('visible');
+
+      // Highlight the point on chart
+      point.classList.add('hover-highlight');
+    }
+
+    function hideConnectorLine() {
+      document.getElementById('connector-line').classList.remove('visible');
+      document.getElementById('hover-label').classList.remove('visible');
+      document.querySelectorAll('.chart-point.hover-highlight').forEach(p => {
+        p.classList.remove('hover-highlight');
+      });
+    }
+
+    // Debug: log positions to console
+    function debugPointPosition(index) {
+      const point = document.querySelectorAll('.chart-point')[index];
+      const svg = document.getElementById('chart');
+      const svgRect = svg.getBoundingClientRect();
+      const cx = parseFloat(point.getAttribute('cx'));
+      const cy = parseFloat(point.getAttribute('cy'));
+      console.log('SVG rect:', svgRect);
+      console.log('Point cx/cy:', cx, cy);
+      console.log('Computed position:', svgRect.left + cx, svgRect.top + cy);
+    }
+
+    // Render chart
+    function renderChart() {
+      const svg = document.getElementById('chart');
+
+      // Calculate scales
+      const xValues = DATA.map((d, i) => i);
+      const yValues = DATA.map(d => d[Y_FIELD]);
+      const yMin = 0;
+      const yMax = Math.max(...yValues) * 1.1;
+
+      const xScale = (i) => MARGIN.left + (i / (DATA.length - 1)) * INNER_WIDTH;
+      const yScale = (v) => MARGIN.top + INNER_HEIGHT - ((v - yMin) / (yMax - yMin)) * INNER_HEIGHT;
+
+      let svgContent = '';
+
+      // Grid lines (horizontal)
+      const gridCount = 5;
+      for (let i = 0; i <= gridCount; i++) {
+        const y = MARGIN.top + (i / gridCount) * INNER_HEIGHT;
+        svgContent += `<line class="grid-line" x1="${MARGIN.left}" y1="${y}" x2="${WIDTH - MARGIN.right}" y2="${y}"/>`;
+      }
+
+      // Y axis labels
+      for (let i = 0; i <= gridCount; i++) {
+        const value = yMax - (i / gridCount) * (yMax - yMin);
+        const y = MARGIN.top + (i / gridCount) * INNER_HEIGHT;
+        const label = formatValue(value, Y_FIELD);
+        svgContent += `<text class="axis-label" x="${MARGIN.left - 10}" y="${y + 4}" text-anchor="end">${label}</text>`;
+      }
+
+      // X axis labels
+      DATA.forEach((d, i) => {
+        const x = xScale(i);
+        const label = formatXLabel(d[X_FIELD]);
+        svgContent += `<text class="axis-label" x="${x}" y="${HEIGHT - MARGIN.bottom + 20}" text-anchor="middle">${label}</text>`;
+      });
+
+      // Area fill
+      let areaPath = `M ${xScale(0)} ${yScale(0)}`;
+      DATA.forEach((d, i) => {
+        areaPath += ` L ${xScale(i)} ${yScale(d[Y_FIELD])}`;
+      });
+      areaPath += ` L ${xScale(DATA.length - 1)} ${yScale(0)} Z`;
+      svgContent += `<path class="chart-area" d="${areaPath}"/>`;
+
+      // Line
+      let linePath = '';
+      DATA.forEach((d, i) => {
+        const x = xScale(i);
+        const y = yScale(d[Y_FIELD]);
+        linePath += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+      });
+      svgContent += `<path class="chart-line" d="${linePath}"/>`;
+
+      // Points
+      DATA.forEach((d, i) => {
+        const x = xScale(i);
+        const y = yScale(d[Y_FIELD]);
+        const selected = selectedPointIndex === i ? ' selected' : '';
+        svgContent += `<circle class="chart-point${selected}" cx="${x}" cy="${y}" r="4" data-index="${i}"/>`;
+      });
+
+      svg.innerHTML = svgContent;
+
+      // Attach event listeners to points
+      document.querySelectorAll('.chart-point').forEach((point) => {
+        point.addEventListener('mouseenter', showTooltip);
+        point.addEventListener('mouseleave', hideTooltip);
+        point.addEventListener('contextmenu', showContextMenu);
+      });
+
+      // Update point positions
+      updatePointPositions();
+    }
+
+    // Update point positions using SVG coordinates transformed to screen
+    function updatePointPositions() {
+      const svg = document.getElementById('chart');
+      const svgRect = svg.getBoundingClientRect();
+
+      document.querySelectorAll('.chart-point').forEach((point, i) => {
+        // Get the cx/cy attributes directly from SVG
+        const cx = parseFloat(point.getAttribute('cx'));
+        const cy = parseFloat(point.getAttribute('cy'));
+
+        // Transform SVG coordinates to screen coordinates
+        pointPositions[i] = {
+          x: svgRect.left + cx,
+          y: svgRect.top + cy
+        };
+      });
+    }
+
+    // Tooltip
+    function showTooltip(e) {
+      const index = parseInt(e.target.dataset.index);
+      const d = DATA[index];
+      const tooltip = document.getElementById('tooltip');
+      const label = document.getElementById('tooltip-label');
+      const value = document.getElementById('tooltip-value');
+
+      label.textContent = formatDate(d[X_FIELD]);
+      value.textContent = formatValue(d[Y_FIELD], Y_FIELD);
+
+      const rect = e.target.getBoundingClientRect();
+      tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
+      tooltip.style.top = (rect.top - tooltip.offsetHeight - 8) + 'px';
+      tooltip.classList.add('visible');
+    }
+
+    function hideTooltip() {
+      document.getElementById('tooltip').classList.remove('visible');
+    }
+
+    // Context menu
+    function showContextMenu(e) {
+      e.preventDefault();
+      selectedPointIndex = parseInt(e.target.dataset.index);
+
+      const menu = document.getElementById('context-menu');
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+      menu.classList.add('visible');
+
+      hideTooltip();
+    }
+
+    function hideContextMenu() {
+      document.getElementById('context-menu').classList.remove('visible');
+    }
+
+    // Explain panel
+    function openExplainPanel() {
+      hideContextMenu();
+      currentStep = 1;
+      updateStepUI();
+
+      // Populate SQL view
+      document.getElementById('sql-view').innerHTML = highlightSQL(QUERY);
+
+      // Populate masking view
+      document.getElementById('masking-columns').innerHTML = buildMaskingView();
+
+      // Populate tables
+      document.getElementById('data-table').innerHTML = buildTable();
+      document.getElementById('data-table-highlight').innerHTML = buildTable(selectedPointIndex);
+
+      // Attach hover listeners to table rows
+      attachTableHoverListeners();
+
+      // Re-render chart to show selected state
+      renderChart();
+
+      // Open panel
+      document.getElementById('main-container').classList.add('explain-open');
+
+      // Update point positions after panel animation
+      setTimeout(updatePointPositions, 400);
+    }
+
+    function closeExplainPanel() {
+      document.getElementById('main-container').classList.remove('explain-open');
+      hideConnectorLine();
+      document.getElementById('hover-label').classList.remove('visible');
+      selectedPointIndex = null;
+      renderChart();
+    }
+
+    function updateStepUI() {
+      // Update indicators
+      for (let i = 1; i <= 4; i++) {
+        const indicator = document.getElementById(`step-${i}-indicator`);
+        const content = document.getElementById(`step-${i}-content`);
+
+        indicator.classList.remove('active', 'completed');
+        content.classList.remove('active');
+
+        if (i < currentStep) {
+          indicator.classList.add('completed');
+        } else if (i === currentStep) {
+          indicator.classList.add('active');
+          content.classList.add('active');
+        }
+      }
+
+      // Update buttons
+      document.getElementById('btn-back').style.display = currentStep > 1 ? 'block' : 'none';
+      document.getElementById('btn-next').textContent = currentStep === 4 ? 'Done' : 'Next';
+    }
+
+    function nextStep() {
+      if (currentStep === 4) {
+        closeExplainPanel();
+      } else {
+        currentStep++;
+        updateStepUI();
+      }
+    }
+
+    function prevStep() {
+      if (currentStep > 1) {
+        currentStep--;
+        updateStepUI();
+      }
+    }
+
+    // Event listeners
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.context-menu') && !e.target.closest('.chart-point')) {
+        hideContextMenu();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        hideContextMenu();
+        closeExplainPanel();
+      }
+    });
+
+    document.getElementById('explain-btn').addEventListener('click', openExplainPanel);
+    document.getElementById('explain-close').addEventListener('click', closeExplainPanel);
+    document.getElementById('btn-next').addEventListener('click', nextStep);
+    document.getElementById('btn-back').addEventListener('click', prevStep);
+
+    // Initialize
+    renderChart();
+  </script>
+</body>
+</html>
