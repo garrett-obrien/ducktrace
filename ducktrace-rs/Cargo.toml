@@ -1,0 +1,25 @@
+[package]
+name = "ducktrace"
+version = "0.1.0"
+edition = "2021"
+description = "Interactive TUI for DuckTrace chart visualization"
+authors = ["Garrett O'Brien"]
+
+[dependencies]
+ratatui = "0.29"
+crossterm = { version = "0.28", features = ["event-stream"] }
+tokio = { version = "1", features = ["full"] }
+notify = "7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlformat = "0.2"
+dirs = "5"
+anyhow = "1"
+duckdb = { version = "1.4", features = ["bundled"] }
+dotenvy = "0.15"
+log = "0.4"
+simplelog = "0.12"
+
+[[bin]]
+name = "ducktrace"
+path = "src/main.rs"

@@ -1,11 +1,11 @@
 ---
-name: explain-chart
-description: Generate interactive charts with "Explain" feature - right-click any data point to trace it back to the SQL query. Requires MotherDuck MCP.
+name: ducktrace
+description: Interactive TUI charts with drill-down - select any data point to query the underlying rows. Requires MotherDuck MCP.
 ---
 
-# Explain Chart Skill
+# DuckTrace
 
-Generate a line chart from a MotherDuck query with built-in data lineage. Users can explore:
+Generate interactive charts from MotherDuck queries with built-in drill-down capability. Users can explore:
 
 1. **Query** - The SQL that produced the data
 2. **Mask** - Which columns map to X/Y axes
@@ -14,34 +14,27 @@ Generate a line chart from a MotherDuck query with built-in data lineage. Users 
 
 ## When to Use
 
-Trigger when user asks for: "explain chart", "chart with explain", "visualize with lineage", or any chart request where they want to trace data back to SQL.
+Trigger when user asks for: "ducktrace", "trace chart", "chart with drill-down", "visualize with lineage", or any chart request where they want to drill into underlying data.
 
-## Viewing Options
+## Viewing
 
-**IMPORTANT: In Claude Code, always use the TUI output by default.** Only generate HTML if the user explicitly requests it (e.g., "save as HTML", "generate HTML file", "open in browser").
-
-### Option 1: Terminal TUI (Default in Claude Code)
-The default output for Claude Code users. The TUI runs in a split terminal alongside the main session and automatically updates when new chart data is generated.
-
-### Option 2: Browser (HTML)
-A standalone HTML file with an interactive explain panel. Only use this when the user explicitly requests HTML output or browser viewing. Right-click any data point to see the 4-step explanation.
+The TUI runs in a split terminal alongside the main Claude Code session and automatically updates when new chart data is generated.
 
 **Setup (one-time):**
 ```bash
-# In the explain-chart skill directory
-uv sync
+# Build the Rust TUI
+cd ducktrace-rs && cargo build --release
 
 # Open a split terminal pane and run:
-uv run explain-chart-tui
-# Alternative: uv run python -m src.tui
+./ducktrace-rs/target/release/ducktrace
 ```
 
 **Split Terminal Layout:**
 ```
 +-------------------------------+---------------------------------------+
-|  Claude Code                  |  MotherDuck Explain Chart             |
+|  Claude Code                  |  DuckTrace                            |
 |                               |                                       |
-|  claude> show revenue by      |  <(o)> MotherDuck Explain Chart       |
+|  claude> show revenue by      |  🦆 DuckTrace: Revenue by Month       |
 |          month                |                                       |
 |                               |  [Query] - Mask - Data - Chart        |
 |  Running query...             |  +-----------------------------------+ |
@@ -52,7 +45,7 @@ uv run explain-chart-tui
 |                               |  | GROUP BY 1 ORDER BY 1            | |
 |                               |  +-----------------------------------+ |
 |                               |                                       |
-|                               |  <- -> tabs  <arrows> scroll  q quit  |
+|                               |  ←→: tabs | ↑↓: select | x: drill-down|
 +-------------------------------+---------------------------------------+
 ```
 
@@ -74,6 +67,8 @@ If not provided, ask for:
 MotherDuck:query(database="<db>", sql="<query>")
 ```
 
+**Time series queries should use `ORDER BY ... DESC`** so the most recent data appears first in the Data tab. The TUI automatically selects the most recent point on load.
+
 Response contains `columns` (array of names) and `rows` (array of arrays).
 
 ### Step 3: Generate Chart
@@ -81,7 +76,7 @@ Response contains `columns` (array of names) and `rows` (array of arrays).
 Pass the MCP response directly to the generator as a single JSON config:
 
 ```bash
-node /mnt/skills/user/explain-chart/src/explain-chart-mcp.js '<JSON>'
+node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '<JSON>'
 ```
 
 The JSON config combines chart params with MCP response:
@@ -94,15 +89,12 @@ The JSON config combines chart params with MCP response:
   "query": "SELECT ... (the SQL you ran)",
   "columns": ["col1", "col2"],
   "rows": [["val1", 100], ["val2", 200]],
-  "output": "/home/claude/chart.html"
 }
 ```
 
 ### Step 4: Output Results
 
-**In Claude Code (default):** The generator automatically writes data to `~/.claude/explain-chart/current.json`. If the user has the TUI running in a split terminal (`npm run tui`), it will automatically refresh to show the new chart. Simply confirm the chart was generated and remind the user to check their TUI pane.
-
-**HTML output (only when explicitly requested):** Use `present_files` to share the generated HTML file with the user.
+The generator writes data to `~/.claude/ducktrace/current.json`. If the user has the TUI running in a split terminal, it will automatically refresh to show the new chart. Confirm the chart was generated and remind the user to check their TUI pane.
 
 ## Complete Example (TUI - Default)
 
@@ -126,7 +118,7 @@ User: "show me revenue by month for 2025 with explain chart"
 
 3. **Claude runs generator (no output path = TUI only):**
    ```bash
-   node /mnt/skills/user/explain-chart/src/explain-chart-mcp.js '{
+   node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '{
      "title": "2025 Revenue by Month",
      "x": "month",
      "y": "revenue",
@@ -138,22 +130,6 @@ User: "show me revenue by month for 2025 with explain chart"
 
 4. **Claude confirms:** "Chart generated! Check your TUI pane to explore the data."
 
-## Example (HTML - Only When Requested)
-
-User: "show me revenue by month and save it as an HTML file"
-
-Same steps 1-2, then:
-
-3. **Claude runs generator with output path:**
-   ```bash
-   node /mnt/skills/user/explain-chart/src/explain-chart-mcp.js '{
-     ...
-     "output": "/home/claude/revenue_chart.html"
-   }'
-   ```
-
-4. **Claude presents file** to user
-
 ## Config Reference
 
 | Field | Required | Description |
@@ -162,27 +138,19 @@ Same steps 1-2, then:
 | `x` | Yes | Column name for X axis |
 | `y` | Yes | Column name for Y axis |
 | `query` | Yes | The SQL query (displayed in explain panel) |
+| `database` | Yes | Database name for drill-down queries |
 | `columns` | Yes | Column names from MCP response |
 | `rows` | Yes | Row data from MCP response |
-| `output` | No | HTML output path. Only include when user explicitly requests HTML. Omit for TUI-only output. |
 | `chart_type` | No | Chart type: "line", "bar", or "scatter". Auto-inferred if omitted (dates->line, categorical->bar, numeric x numeric->scatter). |
+| `drillDown` | No | Drill-down template for explaining data points. See Drill-Down Templates section. |
 
 ## Output
 
-### TUI Data (Default in Claude Code)
-Data is written to `~/.claude/explain-chart/current.json`. The TUI watches this file and auto-refreshes, showing:
+Data is written to `~/.claude/ducktrace/current.json`. The TUI watches this file and auto-refreshes, showing:
 - Query tab with syntax-highlighted SQL
 - Mask tab showing column → axis mapping
 - Data tab with scrollable result table
 - Chart tab with ASCII visualization
-
-### HTML File (Only When Requested)
-When user explicitly requests HTML output, generates a standalone file with:
-- Interactive line chart
-- Right-click context menu on data points
-- 4-step explain panel showing query -> mask -> data -> value
-- Connector lines linking table rows to chart points
-- Zero external dependencies
 
 ## TUI Keyboard Controls
 
@@ -203,8 +171,167 @@ The TUI supports three chart types that can be explicitly set or auto-inferred:
 | `bar` | Categorical X with numeric Y | Comparisons across categories |
 | `scatter` | Both X and Y are numeric | Correlation analysis |
 
+## Drill-Down Templates
+
+When generating a chart from an aggregation query, **always** include a `drillDown` object that enables users to explore the underlying detail rows.
+
+### How Drill-Down Works
+
+1. User selects a data point in the TUI (e.g., "2025-01" with revenue $19M)
+2. TUI substitutes placeholders in the template with actual values
+3. TUI executes the query against MotherDuck
+4. Results display in an overlay showing the detail rows
+
+### Generating Drill-Down Templates
+
+Analyze the original query to understand:
+- **Aggregations**: SUM, COUNT, AVG, MIN, MAX, etc.
+- **GROUP BY clause**: Which columns define the aggregation buckets
+- **Source table**: Where the detail rows live
+- **Filter conditions**: Any WHERE clauses that should carry over
+
+Then generate a template that retrieves the underlying rows for a selected data point.
+
+### Template Format
+
+```json
+{
+  "drillDown": {
+    "description": "Human-readable description of what this shows",
+    "query_template": "SELECT * FROM {{database}}.table WHERE condition = '{{x}}' LIMIT 100",
+    "param_mapping": {
+      "x": "x_column_name",
+      "y": "y_column_name"
+    }
+  }
+}
+```
+
+### Placeholder Reference
+
+| Placeholder | Description | Example Value |
+|-------------|-------------|---------------|
+| `{{database}}` | Database name from config | `sales_db` |
+| `{{x}}` | Selected point's X value | `2025-01` |
+| `{{y}}` | Selected point's Y value | `19000097.60` |
+
+### Examples
+
+**Example 1: Monthly Revenue Aggregation**
+
+Original query:
+```sql
+SELECT strftime('%Y-%m', order_date) AS month, SUM(amount) AS revenue
+FROM orders
+GROUP BY 1
+ORDER BY 1
+```
+
+Drill-down template:
+```json
+{
+  "drillDown": {
+    "description": "Show orders for selected month",
+    "query_template": "SELECT order_id, order_date, customer_name, amount FROM {{database}}.orders WHERE strftime('%Y-%m', order_date) = '{{x}}' ORDER BY amount DESC LIMIT 100",
+    "param_mapping": {"x": "month"}
+  }
+}
+```
+
+**Example 2: Category Sales Count**
+
+Original query:
+```sql
+SELECT category, COUNT(*) AS order_count
+FROM products
+JOIN order_items USING (product_id)
+GROUP BY 1
+```
+
+Drill-down template:
+```json
+{
+  "drillDown": {
+    "description": "Show orders for selected category",
+    "query_template": "SELECT p.product_name, oi.quantity, oi.unit_price FROM {{database}}.products p JOIN {{database}}.order_items oi USING (product_id) WHERE p.category = '{{x}}' LIMIT 100",
+    "param_mapping": {"x": "category"}
+  }
+}
+```
+
+**Example 3: Customer Spending (AVG aggregation)**
+
+Original query:
+```sql
+SELECT customer_segment, AVG(total_spent) AS avg_spending
+FROM customers
+GROUP BY 1
+```
+
+Drill-down template:
+```json
+{
+  "drillDown": {
+    "description": "Show customers in selected segment",
+    "query_template": "SELECT customer_name, email, total_spent FROM {{database}}.customers WHERE customer_segment = '{{x}}' ORDER BY total_spent DESC LIMIT 100",
+    "param_mapping": {"x": "customer_segment"}
+  }
+}
+```
+
+### Best Practices
+
+1. **Always include LIMIT**: Use `LIMIT 100` to prevent overwhelming the TUI with too many rows
+2. **Order meaningfully**: Order by the aggregated column DESC to show most significant rows first
+3. **Select useful columns**: Include identifying columns (IDs, names) plus the aggregated value
+4. **Preserve filters**: If the original query has WHERE clauses, include them in the drill-down
+5. **Match the grouping**: The drill-down WHERE clause should filter on the same column(s) as GROUP BY
+6. **Use {{database}} prefix**: Always prefix table names with `{{database}}.` for cross-database safety
+
+### Complete Example with Drill-Down
+
+User: "show me revenue by month for 2025 with explain chart"
+
+1. **Claude calls MCP:**
+   ```
+   MotherDuck:query(
+     database="sales_db",
+     sql="SELECT strftime('%Y-%m', order_date) AS month, SUM(amount) AS revenue FROM orders WHERE order_date >= '2025-01-01' GROUP BY 1 ORDER BY 1"
+   )
+   ```
+
+2. **Claude runs generator with drill-down:**
+   ```bash
+   node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '{
+     "title": "2025 Revenue by Month",
+     "x": "month",
+     "y": "revenue",
+     "database": "sales_db",
+     "query": "SELECT strftime('\''%Y-%m'\'', order_date) AS month, SUM(amount) AS revenue FROM orders WHERE order_date >= '\''2025-01-01'\'' GROUP BY 1 ORDER BY 1",
+     "columns": ["month", "revenue"],
+     "rows": [["2025-01", 19000097.60], ["2025-02", 18457859.77]],
+     "drillDown": {
+       "description": "Show orders for selected month",
+       "query_template": "SELECT order_id, order_date, customer_name, amount FROM {{database}}.orders WHERE strftime('\''%Y-%m'\'', order_date) = '\''{{x}}'\'' AND order_date >= '\''2025-01-01'\'' ORDER BY amount DESC LIMIT 100",
+       "param_mapping": {"x": "month"}
+     }
+   }'
+   ```
+
+3. **User presses 'x' on January data point** → TUI executes:
+   ```sql
+   SELECT order_id, order_date, customer_name, amount
+   FROM sales_db.orders
+   WHERE strftime('%Y-%m', order_date) = '2025-01'
+     AND order_date >= '2025-01-01'
+   ORDER BY amount DESC
+   LIMIT 100
+   ```
+
+4. **TUI displays overlay** with the 100 largest orders from January
+
 ## Requirements
 
 - MotherDuck MCP must be connected
-- Node.js available in environment (for HTML generation)
-- Python 3.14+ with uv for TUI (`uv sync` in skill directory)
+- Node.js available in environment (for skill entry point)
+- Rust TUI binary (`cargo build --release` in ducktrace-rs/)

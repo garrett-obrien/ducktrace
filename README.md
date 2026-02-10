@@ -1,6 +1,6 @@
 # DuckTrace
 
-Interactive charts with data lineage — right-click any data point to trace it back through your SQL query.
+Interactive charts with data lineage — select any data point to drill down into the underlying rows.
 
 A Claude Code skill that integrates with [MotherDuck](https://motherduck.com/) MCP to query data and generate explorable visualizations.
 
@@ -8,15 +8,15 @@ A Claude Code skill that integrates with [MotherDuck](https://motherduck.com/) M
 
 - [Claude Code](https://claude.ai/code) CLI
 - [MotherDuck MCP](https://github.com/motherduckdb/mcp-server-motherduck) configured in Claude Code
-- Python 3.11+ with [uv](https://github.com/astral-sh/uv)
+- Rust (for building the TUI)
 - Node.js 18+
 
 ## Installation
 
 ```bash
 git clone https://github.com/goblinfactory/ducktrace.git
-cd ducktrace
-uv sync
+cd ducktrace/ducktrace-rs
+cargo build --release
 ```
 
 ## Usage
@@ -26,28 +26,31 @@ uv sync
 Invoke the skill in Claude Code after running a MotherDuck query:
 
 ```
-/explain-chart
+/ducktrace
 ```
 
-This generates an interactive HTML chart and updates the TUI data file.
+This generates an interactive chart and updates the TUI data file.
 
 ### Terminal UI
 
 Run the TUI in a split terminal to see charts update in real-time:
 
 ```bash
-uv run ducktrace
+./ducktrace-rs/target/release/ducktrace
 ```
 
-The TUI watches `~/.claude/explain-chart/current.json` and auto-refreshes when new data arrives.
+The TUI watches `~/.claude/ducktrace/current.json` and auto-refreshes when new data arrives.
 
 ### Keyboard Controls (TUI)
 
 | Key | Action |
 |-----|--------|
 | `1-4` | Switch views (Query, Mask, Data, Chart) |
-| `←` `→` | Navigate data points |
-| `↑` `↓` | Scroll data table |
+| `←` `→` | Navigate between tabs |
+| `↑` `↓` | Scroll/select within tab |
+| `x` | Drill-down on selected data point |
+| `Esc` | Close drill-down overlay |
+| `?` | Toggle help |
 | `q` | Quit |
 
 ## How It Works
@@ -55,15 +58,18 @@ The TUI watches `~/.claude/explain-chart/current.json` and auto-refreshes when n
 ```
 MotherDuck MCP query
         ↓
-  /explain-chart skill
+  /ducktrace skill
         ↓
   ┌─────────────────────────────────┐
-  │  HTML file (browser)            │
-  │  + ~/.claude/explain-chart/     │
-  │    current.json (TUI)           │
+  │  ~/.claude/ducktrace/           │
+  │    current.json (TUI data)      │
   └─────────────────────────────────┘
         ↓
   TUI watches & auto-refreshes
+        ↓
+  Press 'x' to drill-down
+        ↓
+  TUI queries MotherDuck directly
 ```
 
 ### Views
@@ -71,7 +77,7 @@ MotherDuck MCP query
 1. **Query** — SQL with syntax highlighting
 2. **Mask** — Column-to-axis mapping
 3. **Data** — Scrollable data table with row selection
-4. **Chart** — plotext visualization with point selection
+4. **Chart** — Bar/line/scatter visualization with point selection
 
 ### Chart Types
 
@@ -85,21 +91,25 @@ Override with config: `"chart_type": "bar"`
 ## Development
 
 ```bash
-uv sync                      # Install Python dependencies
-uv run ducktrace     # Start terminal UI
-node src/generate.js         # Run standalone HTML generator
+cd ducktrace-rs
+cargo build --release    # Build TUI
+cargo run --release      # Run TUI
 ```
 
 ### Project Structure
 
 ```
+ducktrace-rs/
+├── src/
+│   ├── main.rs         # Entry point, event loop
+│   ├── app.rs          # App state, input handling
+│   ├── db.rs           # MotherDuck drill-down queries
+│   ├── watcher.rs      # File watcher
+│   ├── data/           # Data models
+│   └── ui/             # UI components
+
 src/
-├── explain-chart-mcp.js    # Claude Code skill entry point
-├── generate.js             # HTML generator
-├── tui.py                  # TUI main app (Rich Live display)
-├── views.py                # View renderers (Query, Mask, Data, Chart)
-├── watcher.py              # File watcher for live updates
-└── formatting.py           # Value formatters
+└── ducktrace-mcp.js        # Claude Code skill entry point
 ```
 
 ## License
