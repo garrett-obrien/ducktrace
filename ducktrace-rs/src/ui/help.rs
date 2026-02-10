@@ -50,8 +50,8 @@ pub fn render_help(f: &mut Frame) {
             Span::raw(" Explain selected point (drill-down)"),
         ]),
         Line::from(vec![
-            Span::styled("  r      ", Style::default().fg(Color::Green)),
-            Span::raw("Refresh data from file"),
+            Span::styled("  c      ", Style::default().fg(Color::Green)),
+            Span::raw("Clear data file"),
         ]),
         Line::from(vec![
             Span::styled("  ?      ", Style::default().fg(Color::Green)),

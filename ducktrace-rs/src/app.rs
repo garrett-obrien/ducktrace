@@ -4,7 +4,7 @@ use ratatui::prelude::Rect;
 
 use crate::data::{ChartData, ExplainData};
 use crate::ui::query::get_query_line_count;
-use crate::watcher::{get_data_path, load_data};
+use crate::watcher::get_data_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -88,11 +88,13 @@ impl App {
         self.data = Some(data);
     }
 
-    pub fn refresh_data(&mut self) {
+    pub fn clear_data(&mut self) {
         let path = get_data_path();
-        if let Ok(data) = load_data(&path) {
-            self.on_data_update(data);
-        }
+        let _ = std::fs::remove_file(&path);
+        self.data = None;
+        self.selected_point = 0;
+        self.scroll_offset = 0;
+        self.close_explain();
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -141,7 +143,7 @@ impl App {
 
         match key.code {
             KeyCode::Char('q') => self.running = false,
-            KeyCode::Char('r') => self.refresh_data(),
+            KeyCode::Char('c') => self.clear_data(),
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Left => self.active_tab = self.active_tab.prev(),
             KeyCode::Right => self.active_tab = self.active_tab.next(),

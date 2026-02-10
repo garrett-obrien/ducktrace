@@ -169,7 +169,7 @@ fn render_status_bar(f: &mut Frame, area: Rect, app: &App) {
         String::new()
     };
 
-    let help_hint = "←→: tabs | ↑↓: select | x: explain | r: refresh | ?: help | q: quit";
+    let help_hint = "←→: tabs | ↑↓: select | x: explain | c: clear | ?: help | q: quit";
 
     let status_line = format!("{}{}", status, help_hint);
 
