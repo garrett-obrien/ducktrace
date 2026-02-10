@@ -140,9 +140,6 @@ Written to `~/.claude/ducktrace/current.json` — the TUI watches this file and 
 
 | Action | Effect |
 |--------|--------|
-| Click on tab | Switch to that tab |
-| Click on data row | Select that row |
-| Click on chart bar/point | Select that data point |
 | Scroll wheel (Query tab) | Scroll SQL query |
 | Scroll wheel (Data/Chart tab) | Change selected row/point |
 

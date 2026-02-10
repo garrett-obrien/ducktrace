@@ -46,10 +46,6 @@ pub fn render(f: &mut Frame, app: &mut App) {
         ])
         .split(f.area());
 
-    // Store layout areas for mouse hit testing
-    app.layout.tabs_area = chunks[1];
-    app.layout.content_area = chunks[2];
-
     // Title bar
     render_title(f, chunks[0], app);
 
@@ -63,11 +59,9 @@ pub fn render(f: &mut Frame, app: &mut App) {
             Tab::Mask => mask::render_mask(f, chunks[2], data),
             Tab::Data => {
                 self::data::render_data(f, chunks[2], data, app.selected_point);
-                app.layout.data_table_area = chunks[2];
             }
             Tab::Chart => {
-                let chart_area = chart::render_chart(f, chunks[2], data, app.selected_point);
-                app.layout.chart_area = chart_area;
+                chart::render_chart(f, chunks[2], data, app.selected_point);
             }
         }
     } else {
@@ -107,52 +101,131 @@ fn render_title(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(paragraph, area);
 }
 
+// Block-character ASCII art for "DuckTrace" with | delimiters between letters.
+// Each segment between pipes gets its own color from the palette.
+const DUCKTRACE_BANNER: &[&str] = &[
+    " ██████╗ |██╗   ██╗| ██████╗|██╗  ██╗|████████╗|██████╗ | █████╗ | ██████╗|███████╗",
+    " ██╔══██╗|██║   ██║|██╔════╝|██║ ██╔╝|╚══██╔══╝|██╔══██╗|██╔══██╗|██╔════╝|██╔════╝",
+    " ██║  ██║|██║   ██║|██║     |█████╔╝ |   ██║   |██████╔╝|███████║|██║     |█████╗  ",
+    " ██║  ██║|██║   ██║|██║     |██╔═██╗ |   ██║   |██╔══██╗|██╔══██║|██║     |██╔══╝  ",
+    " ██████╔╝|╚██████╔╝|╚██████╗|██║  ██╗|   ██║   |██║  ██║|██║  ██║|╚██████╗|███████╗",
+    " ╚═════╝ | ╚═════╝ | ╚═════╝|╚═╝  ╚═╝|   ╚═╝   |╚═╝  ╚═╝|╚═╝  ╚═╝| ╚═════╝|╚══════╝",
+];
+
+// Yellow-to-cyan gradient palette (one color per letter: D U C K T R A C E)
+const BANNER_COLORS: &[(u8, u8, u8)] = &[
+    (255, 255, 50),  // D — bright yellow
+    (220, 245, 60),  // U — yellow-lime
+    (180, 235, 80),  // C — lime
+    (130, 220, 110), // K — yellow-green
+    (80, 210, 150),  // T — green-teal
+    (50, 200, 180),  // R — teal
+    (40, 190, 210),  // A — teal-cyan
+    (30, 180, 235),  // C — light cyan
+    (0, 170, 255),   // E — cyan-blue
+];
+
 fn render_waiting(f: &mut Frame, area: Rect, frame: u32) {
-    // Animated duck frames
-    let duck_frames = [
-        r#"
-    __
-  >(o )___
-   ( ._> /
-    `---'
-        "#,
-        r#"
-     __
-   >(o )___
-    ( ._> /
-     `---'
-        "#,
-        r#"
-      __
-    >(o )___
-     ( ._> /
-      `---'
-        "#,
-        r#"
-     __
-   >(o )___
-    ( ._> /
-     `---'
-        "#,
-    ];
+    let mut lines: Vec<Line> = Vec::new();
 
-    let frame_idx = (frame / 10 % duck_frames.len() as u32) as usize;
-    let duck = duck_frames[frame_idx];
+    // Add a blank line for top padding
+    lines.push(Line::from(""));
 
+    // Render the banner with per-letter colors
+    for banner_line in DUCKTRACE_BANNER {
+        let segments: Vec<&str> = banner_line.split('|').collect();
+        let spans: Vec<Span> = segments
+            .iter()
+            .enumerate()
+            .map(|(i, seg)| {
+                let (r, g, b) = BANNER_COLORS[i % BANNER_COLORS.len()];
+                Span::styled(
+                    *seg,
+                    Style::default()
+                        .fg(Color::Rgb(r, g, b))
+                        .add_modifier(Modifier::BOLD),
+                )
+            })
+            .collect();
+        lines.push(Line::from(spans));
+    }
+
+    // Tagline
+    lines.push(Line::from(""));
+    lines.push(Line::styled(
+        "Interactive charts with data lineage from MotherDuck queries.",
+        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+    ));
+    lines.push(Line::styled(
+        "Select any data point and drill down into the underlying rows.",
+        Style::default().fg(Color::White),
+    ));
+
+    // Getting Started
+    lines.push(Line::from(""));
+    lines.push(Line::styled(
+        "Getting Started:",
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+    ));
+    lines.push(Line::styled(
+        "  1. Open a split terminal pane and run this TUI",
+        Style::default().fg(Color::Gray),
+    ));
+    lines.push(Line::styled(
+        "  2. In Claude Code, run /ducktrace to generate a chart",
+        Style::default().fg(Color::Gray),
+    ));
+    lines.push(Line::styled(
+        "  3. The chart appears here automatically",
+        Style::default().fg(Color::Gray),
+    ));
+
+    // Quick Keys
+    let key_style = Style::default().fg(Color::Green);
+    let desc_style = Style::default().fg(Color::Gray);
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("Quick Keys:  ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+        Span::styled("←→", key_style),
+        Span::styled(" switch tabs  ", desc_style),
+        Span::styled("↑↓", key_style),
+        Span::styled(" select  ", desc_style),
+        Span::styled("x", key_style),
+        Span::styled(" drill-down  ", desc_style),
+        Span::styled("?", key_style),
+        Span::styled(" full help", desc_style),
+    ]));
+
+    // Status
     let dots = ".".repeat(((frame / 5) % 4) as usize);
-    let text = format!(
-        "{}\n\n  Waiting for data{}\n\n  Watching: ~/.claude/ducktrace/current.json\n\n  Press ? for help, q to quit",
-        duck, dots
-    );
+    lines.push(Line::from(""));
+    lines.push(Line::styled(
+        format!("Waiting for data{}", dots),
+        Style::default().fg(Color::Yellow),
+    ));
+    lines.push(Line::styled(
+        "Watching: ~/.claude/ducktrace/current.json",
+        Style::default().fg(Color::DarkGray),
+    ));
 
-    let paragraph = Paragraph::new(text)
+    // GitHub link
+    lines.push(Line::from(""));
+    lines.push(Line::styled(
+        "Contributions welcome!",
+        Style::default().fg(Color::DarkGray),
+    ));
+    lines.push(Line::styled(
+        "github.com/garrett-obrien/ducktrace",
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM),
+    ));
+
+    let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
                 .title(" Waiting for Chart Data ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Yellow)),
         )
-        .style(Style::default().fg(Color::Yellow))
         .alignment(Alignment::Center);
 
     f.render_widget(paragraph, area);

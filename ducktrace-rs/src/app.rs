@@ -1,6 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent, MouseButton, MouseEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use log::{debug, info};
-use ratatui::prelude::Rect;
 
 use crate::data::{ChartData, ExplainData};
 use crate::ui::query::get_query_line_count;
@@ -34,15 +33,6 @@ impl Tab {
     }
 }
 
-/// Layout areas for mouse hit testing
-#[derive(Default, Clone)]
-pub struct LayoutAreas {
-    pub tabs_area: Rect,
-    pub content_area: Rect,
-    pub chart_area: Rect,
-    pub data_table_area: Rect,
-}
-
 pub struct App {
     pub data: Option<ChartData>,
     pub active_tab: Tab,
@@ -51,7 +41,6 @@ pub struct App {
     pub show_help: bool,
     pub running: bool,
     pub frame: u32,
-    pub layout: LayoutAreas,
     // Explain mode state
     pub show_explain: bool,
     pub explain_data: Option<ExplainData>,
@@ -72,7 +61,6 @@ impl App {
             show_help: false,
             running: true,
             frame: 0,
-            layout: LayoutAreas::default(),
             show_explain: false,
             explain_data: None,
             explain_loading: false,
@@ -292,7 +280,6 @@ impl App {
     }
 
     pub fn handle_mouse(&mut self, mouse: MouseEvent) {
-        // Any mouse click closes help
         if self.show_help {
             if matches!(mouse.kind, MouseEventKind::Down(_)) {
                 self.show_help = false;
@@ -300,40 +287,15 @@ impl App {
             return;
         }
 
-        let x = mouse.column;
-        let y = mouse.row;
-
         match mouse.kind {
-            // Mouse wheel scrolling
             MouseEventKind::ScrollUp => {
                 self.handle_scroll(-3);
             }
             MouseEventKind::ScrollDown => {
                 self.handle_scroll(3);
             }
-
-            // Left click
-            MouseEventKind::Down(MouseButton::Left) => {
-                // Check if click is in tabs area
-                if self.is_in_rect(x, y, self.layout.tabs_area) {
-                    self.handle_tab_click(x);
-                }
-                // Check if click is in content area
-                else if self.is_in_rect(x, y, self.layout.content_area) {
-                    match self.active_tab {
-                        Tab::Data => self.handle_data_click(y),
-                        Tab::Chart => self.handle_chart_click(x, y),
-                        _ => {}
-                    }
-                }
-            }
-
             _ => {}
         }
-    }
-
-    fn is_in_rect(&self, x: u16, y: u16, rect: Rect) -> bool {
-        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
     }
 
     fn handle_scroll(&mut self, delta: i32) {
@@ -363,86 +325,6 @@ impl App {
                 }
             }
             _ => {}
-        }
-    }
-
-    fn handle_tab_click(&mut self, x: u16) {
-        // Calculate which tab was clicked based on x position
-        // Tabs are roughly evenly spaced: "1:Query" "2:Mask" "3:Data" "4:Chart"
-        let tabs_start = self.layout.tabs_area.x;
-        let tabs_width = self.layout.tabs_area.width;
-        let relative_x = x.saturating_sub(tabs_start);
-
-        // Each tab takes roughly 1/4 of the width
-        let tab_width = tabs_width / 4;
-        let tab_index = (relative_x / tab_width.max(1)) as usize;
-
-        if tab_index < 4 {
-            self.active_tab = Tab::from_index(tab_index);
-        }
-    }
-
-    fn handle_data_click(&mut self, y: u16) {
-        if let Some(ref data) = self.data {
-            // Calculate which row was clicked
-            // Account for border (1) and header (2 lines including margin)
-            let content_start = self.layout.content_area.y + 3;
-            if y >= content_start {
-                let row_index = (y - content_start) as usize;
-                if row_index < data.rows.len() {
-                    self.selected_point = row_index;
-                }
-            }
-        }
-    }
-
-    fn handle_chart_click(&mut self, x: u16, y: u16) {
-        if let Some(ref data) = self.data {
-            if data.rows.is_empty() {
-                return;
-            }
-
-            let chart_area = self.layout.chart_area;
-            if !self.is_in_rect(x, y, chart_area) {
-                return;
-            }
-
-            // For bar charts, calculate which bar was clicked
-            // For line/scatter, find nearest point
-            let chart_type = data.infer_chart_type();
-
-            match chart_type {
-                crate::data::ChartType::Bar => {
-                    // Bar chart: divide chart width by number of bars
-                    let chart_inner_x = chart_area.x + 1; // Account for border
-                    let chart_inner_width = chart_area.width.saturating_sub(2);
-
-                    if x >= chart_inner_x {
-                        let relative_x = x - chart_inner_x;
-                        // Each bar takes roughly equal width
-                        let bar_width = chart_inner_width as usize / data.rows.len().max(1);
-                        if bar_width > 0 {
-                            let bar_index = relative_x as usize / bar_width;
-                            if bar_index < data.rows.len() {
-                                self.selected_point = bar_index;
-                            }
-                        }
-                    }
-                }
-                crate::data::ChartType::Line | crate::data::ChartType::Scatter => {
-                    // Line/scatter: find nearest point based on x position
-                    let chart_inner_x = chart_area.x + 1;
-                    let chart_inner_width = chart_area.width.saturating_sub(2);
-
-                    if x >= chart_inner_x && chart_inner_width > 0 && data.rows.len() > 1 {
-                        let relative_x = x - chart_inner_x;
-                        let point_spacing =
-                            chart_inner_width as f64 / (data.rows.len() - 1).max(1) as f64;
-                        let point_index = (relative_x as f64 / point_spacing).round() as usize;
-                        self.selected_point = point_index.min(data.rows.len() - 1);
-                    }
-                }
-            }
         }
     }
 
