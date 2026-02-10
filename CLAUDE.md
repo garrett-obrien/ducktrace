@@ -132,7 +132,7 @@ Written to `~/.claude/ducktrace/current.json` — the TUI watches this file and 
 | `PgUp` `PgDn` | Page scroll |
 | `x` | Execute drill-down on selected data point |
 | `Esc` | Close drill-down overlay |
-| `r` | Refresh data from file |
+| `c` | Clear data file |
 | `?` | Toggle help overlay |
 | `q` | Quit |
 
