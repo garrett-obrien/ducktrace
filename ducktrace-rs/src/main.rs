@@ -165,8 +165,8 @@ async fn main() -> Result<()> {
                                 AppEvent::DrillDownResult(Ok(explain_data))
                             }
                             Err(e) => {
-                                error!("Drill-down query failed: {}", e);
-                                AppEvent::DrillDownResult(Err(e.to_string()))
+                                error!("Drill-down query failed: {:#}", e);
+                                AppEvent::DrillDownResult(Err(format!("{:#}", e)))
                             }
                         }
                     }

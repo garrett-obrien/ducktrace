@@ -6,7 +6,7 @@ use ratatui::{
 use crate::app::Tab;
 
 pub fn render_tabs(f: &mut Frame, area: Rect, active_tab: Tab) {
-    let titles = vec!["1:Query", "2:Mask", "3:Data", "4:Chart"];
+    let titles = vec!["Home", "Query", "Mask", "Data", "Chart"];
 
     let tabs = RatatuiTabs::new(titles)
         .block(Block::default().borders(Borders::BOTTOM))

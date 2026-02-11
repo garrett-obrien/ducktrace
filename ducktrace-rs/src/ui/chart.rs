@@ -16,8 +16,7 @@ fn is_reverse_sorted(data: &ChartData) -> bool {
     first_x > last_x
 }
 
-/// Render the chart and return the chart area for mouse hit testing
-pub fn render_chart(f: &mut Frame, area: Rect, data: &ChartData, selected: usize) -> Rect {
+pub fn render_chart(f: &mut Frame, area: Rect, data: &ChartData, selected: usize) {
     let chart_type = data.infer_chart_type();
 
     // Split area for chart and selection info
@@ -37,9 +36,6 @@ pub fn render_chart(f: &mut Frame, area: Rect, data: &ChartData, selected: usize
 
     // Render selection info
     render_selection_info(f, info_area, data, selected);
-
-    // Return the chart area for mouse hit testing
-    chart_area
 }
 
 fn render_bar_chart(f: &mut Frame, area: Rect, data: &ChartData, selected: usize) {

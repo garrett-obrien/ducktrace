@@ -24,19 +24,8 @@ pub fn render_help(f: &mut Frame) {
             Span::raw("Switch between tabs"),
         ]),
         Line::from(vec![
-            Span::styled("  1-4    ", Style::default().fg(Color::Green)),
-            Span::raw("Jump to tab (Query/Mask/Data/Chart)"),
-        ]),
-        Line::from(vec![
             Span::styled("  ↑/↓    ", Style::default().fg(Color::Green)),
             Span::raw("Scroll/select within tab"),
-        ]),
-        Line::from(""),
-        Line::from(Span::styled("Mouse", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("  Click  ", Style::default().fg(Color::Green)),
-            Span::raw("Select tab, row, or chart point"),
         ]),
         Line::from(vec![
             Span::styled("  Scroll ", Style::default().fg(Color::Green)),
@@ -65,6 +54,10 @@ pub fn render_help(f: &mut Frame) {
         Line::from(Span::styled("Tabs", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
         Line::from(""),
         Line::from(vec![
+            Span::styled("  Home   ", Style::default().fg(Color::Yellow)),
+            Span::raw("Welcome screen and status"),
+        ]),
+        Line::from(vec![
             Span::styled("  Query  ", Style::default().fg(Color::Yellow)),
             Span::raw("View formatted SQL query"),
         ]),
@@ -81,7 +74,7 @@ pub fn render_help(f: &mut Frame) {
             Span::raw("Visualize data (line/bar/scatter)"),
         ]),
         Line::from(""),
-        Line::from(Span::styled("Press any key or click to close", Style::default().fg(Color::DarkGray))),
+        Line::from(Span::styled("Press any key to close", Style::default().fg(Color::DarkGray))),
     ];
 
     let paragraph = Paragraph::new(help_text)
