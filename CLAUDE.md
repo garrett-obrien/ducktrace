@@ -70,7 +70,7 @@ ducktrace/
     ├── Cargo.toml          # ratatui, crossterm, duckdb, tokio, notify, serde
     └── src/
         ├── main.rs         # Entry point, async runtime, event loop
-        ├── app.rs          # App state, keyboard + mouse handling
+        ├── app.rs          # App state, Tab enum (Home/Query/Mask/Data/Chart), keyboard + mouse handling
         ├── db.rs           # MotherDuck connection via DuckDB for drill-down queries
         ├── watcher.rs      # File watcher (notify crate)
         ├── data/
@@ -78,7 +78,7 @@ ducktrace/
         │   ├── model.rs    # ChartData struct, chart type inference
         │   └── format.rs   # Number/currency formatting
         └── ui/
-            ├── mod.rs      # Main render function, layout
+            ├── mod.rs      # Main render function, layout, Home tab (splash + status)
             ├── tabs.rs     # Tab bar rendering
             ├── query.rs    # SQL query view with syntax highlighting
             ├── mask.rs     # Column mapping table
@@ -125,14 +125,13 @@ Written to `~/.claude/ducktrace/current.json` — the TUI watches this file and 
 
 | Key | Action |
 |-----|--------|
-| `←` `→` | Switch between tabs |
-| `1`-`4` | Jump to tab (Query/Mask/Data/Chart) |
+| `←` `→` | Switch between tabs (Home/Query/Mask/Data/Chart) |
 | `↑` `↓` | Scroll/select within tab |
 | `Home` `End` | Jump to first/last |
 | `PgUp` `PgDn` | Page scroll |
 | `x` | Execute drill-down on selected data point |
 | `Esc` | Close drill-down overlay |
-| `c` | Clear data file |
+| `c` | Clear data file (returns to Home tab) |
 | `?` | Toggle help overlay |
 | `q` | Quit |
 

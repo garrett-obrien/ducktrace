@@ -53,19 +53,36 @@ pub fn render(f: &mut Frame, app: &mut App) {
     tabs::render_tabs(f, chunks[1], app.active_tab);
 
     // Content area
-    if let Some(ref data) = app.data {
-        match app.active_tab {
-            Tab::Query => query::render_query(f, chunks[2], data, app.scroll_offset),
-            Tab::Mask => mask::render_mask(f, chunks[2], data),
-            Tab::Data => {
-                self::data::render_data(f, chunks[2], data, app.selected_point);
-            }
-            Tab::Chart => {
-                chart::render_chart(f, chunks[2], data, app.selected_point);
+    match app.active_tab {
+        Tab::Home => render_home(f, chunks[2], app),
+        Tab::Query => {
+            if let Some(ref data) = app.data {
+                query::render_query(f, chunks[2], data, app.scroll_offset);
+            } else {
+                render_no_data(f, chunks[2]);
             }
         }
-    } else {
-        render_waiting(f, chunks[2], app.frame);
+        Tab::Mask => {
+            if let Some(ref data) = app.data {
+                mask::render_mask(f, chunks[2], data);
+            } else {
+                render_no_data(f, chunks[2]);
+            }
+        }
+        Tab::Data => {
+            if let Some(ref data) = app.data {
+                self::data::render_data(f, chunks[2], data, app.selected_point);
+            } else {
+                render_no_data(f, chunks[2]);
+            }
+        }
+        Tab::Chart => {
+            if let Some(ref data) = app.data {
+                chart::render_chart(f, chunks[2], data, app.selected_point);
+            } else {
+                render_no_data(f, chunks[2]);
+            }
+        }
     }
 
     // Status bar
@@ -125,7 +142,7 @@ const BANNER_COLORS: &[(u8, u8, u8)] = &[
     (0, 170, 255),   // E — cyan-blue
 ];
 
-fn render_waiting(f: &mut Frame, area: Rect, frame: u32) {
+fn render_home(f: &mut Frame, area: Rect, app: &App) {
     let mut lines: Vec<Line> = Vec::new();
 
     // Add a blank line for top padding
@@ -196,13 +213,20 @@ fn render_waiting(f: &mut Frame, area: Rect, frame: u32) {
         Span::styled(" full help", desc_style),
     ]));
 
-    // Status
-    let dots = ".".repeat(((frame / 5) % 4) as usize);
+    // Status — depends on whether data is loaded
     lines.push(Line::from(""));
-    lines.push(Line::styled(
-        format!("Waiting for data{}", dots),
-        Style::default().fg(Color::Yellow),
-    ));
+    if let Some(ref data) = app.data {
+        lines.push(Line::styled(
+            format!("✓ Data loaded: {}", data.title),
+            Style::default().fg(Color::Green),
+        ));
+    } else {
+        let dots = ".".repeat(((app.frame / 5) % 4) as usize);
+        lines.push(Line::styled(
+            format!("Waiting for data{}", dots),
+            Style::default().fg(Color::Yellow),
+        ));
+    }
     lines.push(Line::styled(
         "Watching: ~/.claude/ducktrace/current.json",
         Style::default().fg(Color::DarkGray),
@@ -219,13 +243,32 @@ fn render_waiting(f: &mut Frame, area: Rect, frame: u32) {
         Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM),
     ));
 
+    let (border_color, title) = if app.data.is_some() {
+        (Color::Green, " Home ")
+    } else {
+        (Color::Yellow, " Home ")
+    };
+
     let paragraph = Paragraph::new(lines)
         .block(
             Block::default()
-                .title(" Waiting for Chart Data ")
+                .title(title)
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_style(Style::default().fg(border_color)),
         )
+        .alignment(Alignment::Center);
+
+    f.render_widget(paragraph, area);
+}
+
+fn render_no_data(f: &mut Frame, area: Rect) {
+    let paragraph = Paragraph::new("No data loaded — use /ducktrace in Claude Code to generate a chart.")
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::DarkGray)),
+        )
+        .style(Style::default().fg(Color::DarkGray))
         .alignment(Alignment::Center);
 
     f.render_widget(paragraph, area);

@@ -7,29 +7,31 @@ use crate::watcher::get_data_path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
-    Query = 0,
-    Mask = 1,
-    Data = 2,
-    Chart = 3,
+    Home = 0,
+    Query = 1,
+    Mask = 2,
+    Data = 3,
+    Chart = 4,
 }
 
 impl Tab {
     pub fn from_index(index: usize) -> Self {
         match index {
-            0 => Tab::Query,
-            1 => Tab::Mask,
-            2 => Tab::Data,
-            3 => Tab::Chart,
-            _ => Tab::Query,
+            0 => Tab::Home,
+            1 => Tab::Query,
+            2 => Tab::Mask,
+            3 => Tab::Data,
+            4 => Tab::Chart,
+            _ => Tab::Home,
         }
     }
 
     pub fn next(&self) -> Self {
-        Tab::from_index((*self as usize + 1) % 4)
+        Tab::from_index((*self as usize + 1) % 5)
     }
 
     pub fn prev(&self) -> Self {
-        Tab::from_index((*self as usize + 3) % 4)
+        Tab::from_index((*self as usize + 4) % 5)
     }
 }
 
@@ -55,7 +57,7 @@ impl App {
     pub fn new() -> Self {
         Self {
             data: None,
-            active_tab: Tab::Query,
+            active_tab: Tab::Home,
             scroll_offset: 0,
             selected_point: 0,
             show_help: false,
@@ -74,6 +76,7 @@ impl App {
         self.selected_point = 0;
         self.scroll_offset = 0;
         self.data = Some(data);
+        self.active_tab = Tab::Query;
     }
 
     pub fn clear_data(&mut self) {
@@ -82,6 +85,7 @@ impl App {
         self.data = None;
         self.selected_point = 0;
         self.scroll_offset = 0;
+        self.active_tab = Tab::Home;
         self.close_explain();
     }
 
@@ -135,9 +139,6 @@ impl App {
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Left => self.active_tab = self.active_tab.prev(),
             KeyCode::Right => self.active_tab = self.active_tab.next(),
-            KeyCode::Char(c) if ('1'..='4').contains(&c) => {
-                self.active_tab = Tab::from_index((c as u8 - b'1') as usize);
-            }
             // Explain selected point
             KeyCode::Char('x') | KeyCode::Enter => {
                 if matches!(self.active_tab, Tab::Chart | Tab::Data) {
