@@ -1,10 +1,8 @@
 # DuckTrace
 
-Interactive charts with data lineage — select any data point to drill down into the underlying rows.
-
 ![DuckTrace TUI](docs/ducktrace.png)
 
-DuckTrace is a [Claude Code](https://claude.ai/code) skill paired with a Rust TUI. You talk to Claude, Claude queries [MotherDuck](https://motherduck.com/), and the results appear in a terminal dashboard where you can explore the data interactively.
+Interactive charts with data lineage — select any data point to drill down into the underlying rows. DuckTrace contains a [Claude Code](https://claude.ai/code) skill paired with a Rust TUI. You talk to Claude, Claude queries [MotherDuck](https://motherduck.com/), and the results appear in a terminal dashboard where you can explore the data interactively.
 
 ## How It Works
 
@@ -25,7 +23,7 @@ The two sides communicate through the filesystem — no server, no ports, no con
 │                             │       │                                  │
 │  Claude queries MotherDuck  │  ───► │  Auto-refreshes with new data    │
 │  via MCP, writes results    │ file  │                                  │
-│  to current.json            │ watch │  Select a point, press 'x' ───► │
+│  to current.json            │ watch │  Select a point, press 'x' ───►  │
 │                             │       │  TUI queries MotherDuck directly │
 │                             │       │  and shows underlying rows       │
 └─────────────────────────────┘       └──────────────────────────────────┘
