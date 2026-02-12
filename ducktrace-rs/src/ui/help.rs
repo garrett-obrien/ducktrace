@@ -39,6 +39,36 @@ pub fn render_help(f: &mut Frame) {
             Span::raw(" Explain selected point (drill-down)"),
         ]),
         Line::from(vec![
+            Span::styled("  Enter  ", Style::default().fg(Color::Green)),
+            Span::raw("Load selected analysis (Home tab)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  d/Del  ", Style::default().fg(Color::Green)),
+            Span::raw("Delete selected analysis (Home tab)"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("Drill-Down Overlay", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  ←/→    ", Style::default().fg(Color::Green)),
+            Span::raw("Select column"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Enter  ", Style::default().fg(Color::Green)),
+            Span::raw("Sort by column (asc/desc/off)"),
+        ]),
+        Line::from(vec![
+            Span::styled("  ↑/↓    ", Style::default().fg(Color::Green)),
+            Span::raw("Scroll rows"),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc    ", Style::default().fg(Color::Green)),
+            Span::raw("Close overlay"),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("General", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(vec![
             Span::styled("  c      ", Style::default().fg(Color::Green)),
             Span::raw("Clear data file"),
         ]),
@@ -55,7 +85,7 @@ pub fn render_help(f: &mut Frame) {
         Line::from(""),
         Line::from(vec![
             Span::styled("  Home   ", Style::default().fg(Color::Yellow)),
-            Span::raw("Welcome screen and status"),
+            Span::raw("Data selector and status"),
         ]),
         Line::from(vec![
             Span::styled("  Query  ", Style::default().fg(Color::Yellow)),

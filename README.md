@@ -1,8 +1,8 @@
-🦆🦆under duckvelopment🦆🦆
-
 # DuckTrace
 
 Interactive charts with data lineage — select any data point to drill down into the underlying rows.
+
+![DuckTrace TUI](docs/ducktrace.png)
 
 A Claude Code skill that integrates with [MotherDuck](https://motherduck.com/) MCP to query data and generate explorable visualizations.
 

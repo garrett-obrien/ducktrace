@@ -44,14 +44,14 @@ impl QueryExecutor {
             // Determine column count from first row
             if col_count == 0 {
                 // Try to find column count by probing
-                col_count = Self::probe_column_count(&row);
+                col_count = Self::probe_column_count(row);
                 debug!("Detected {} columns", col_count);
             }
 
-            let row_values = Self::extract_row(&row, col_count)?;
+            let row_values = Self::extract_row(row, col_count)?;
             all_rows.push(row_values);
 
-            if all_rows.len() % 20 == 0 {
+            if all_rows.len().is_multiple_of(20) {
                 debug!("Fetched {} rows so far", all_rows.len());
             }
         }

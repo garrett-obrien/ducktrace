@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
-use crate::data::ChartData;
+use crate::data::{ChartData, HistoryEntry};
 
 /// Get the path to the data file
 pub fn get_data_path() -> PathBuf {
@@ -18,6 +18,46 @@ pub fn load_data(path: &PathBuf) -> Result<ChartData> {
     let content = std::fs::read_to_string(path)?;
     let data: ChartData = serde_json::from_str(&content)?;
     Ok(data)
+}
+
+/// Get the path to the history directory
+pub fn get_history_dir() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".claude/ducktrace/history")
+}
+
+/// Load history entries from the history directory, sorted newest-first
+pub fn load_history_entries() -> Vec<HistoryEntry> {
+    let history_dir = get_history_dir();
+    let entries = match std::fs::read_dir(&history_dir) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut history: Vec<HistoryEntry> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                return None;
+            }
+            let content = std::fs::read_to_string(&path).ok()?;
+            let data: ChartData = serde_json::from_str(&content).ok()?;
+            let timestamp = data.timestamp.unwrap_or(0);
+            Some(HistoryEntry {
+                path,
+                title: data.title,
+                timestamp,
+                row_count: data.rows.len(),
+                chart_type: data.chart_type,
+            })
+        })
+        .collect();
+
+    history.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    history.truncate(20);
+    history
 }
 
 /// Watch the data file and send updates through the channel

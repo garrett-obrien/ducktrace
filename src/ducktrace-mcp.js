@@ -115,6 +115,30 @@ try {
 
   fs.writeFileSync(tuiDataFile, JSON.stringify(tuiData, null, 2));
   console.log(`TUI data: ${tuiDataFile}`);
+
+  // Archive to history for the TUI data selector
+  try {
+    const historyDir = path.join(tuiDataDir, 'history');
+    if (!fs.existsSync(historyDir)) {
+      fs.mkdirSync(historyDir, { recursive: true });
+    }
+
+    const historyFile = path.join(historyDir, `${tuiData.timestamp}.json`);
+    fs.writeFileSync(historyFile, JSON.stringify(tuiData, null, 2));
+
+    // Rotate: keep only the 20 most recent
+    const files = fs.readdirSync(historyDir)
+      .filter(f => f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const old of files.slice(20)) {
+      fs.unlinkSync(path.join(historyDir, old));
+    }
+  } catch (archiveErr) {
+    // Archiving failure doesn't break the main flow
+    console.log(`Note: Could not archive to history: ${archiveErr.message}`);
+  }
 } catch (e) {
   // TUI data write is optional, don't fail if it doesn't work
   console.log(`Note: Could not write TUI data: ${e.message}`);

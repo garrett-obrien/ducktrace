@@ -105,54 +105,67 @@ fn render_data(f: &mut Frame, area: Rect, explain_data: &ExplainData, app: &App)
             .alignment(Alignment::Center);
         f.render_widget(empty, chunks[1]);
     } else {
-        render_table(f, chunks[1], explain_data, app.explain_scroll);
+        render_table(f, chunks[1], explain_data, app);
     }
 
     // Help hint
-    let help = Paragraph::new("↑↓ scroll | PgUp/PgDn page | Esc close")
+    let help = Paragraph::new("↑↓ scroll | ←→ column | Enter sort | PgUp/PgDn page | Esc close")
         .style(Style::default().fg(Color::DarkGray))
         .alignment(Alignment::Center);
     f.render_widget(help, chunks[2]);
 }
 
-fn render_table(f: &mut Frame, area: Rect, explain_data: &ExplainData, scroll: usize) {
-    // Calculate column widths based on content
+fn render_table(f: &mut Frame, area: Rect, explain_data: &ExplainData, app: &App) {
     let col_count = explain_data.columns.len();
     if col_count == 0 {
         return;
     }
 
-    // Calculate available width per column
-    let available_width = area.width.saturating_sub(2); // Account for borders
+    let available_width = area.width.saturating_sub(2);
     let col_width = (available_width as usize / col_count).max(8);
 
-    // Build header
+    // Build header with sort indicator and selected column highlight
     let header_cells: Vec<Cell> = explain_data
         .columns
         .iter()
-        .map(|col| {
-            Cell::from(truncate_for_width(col, col_width))
-                .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        .enumerate()
+        .map(|(i, col)| {
+            let indicator = if app.explain_sort_column == Some(i) {
+                if app.explain_sort_asc { " \u{25b2}" } else { " \u{25bc}" }
+            } else {
+                ""
+            };
+            // Reserve space for indicator in truncation
+            let max_name = if indicator.is_empty() { col_width } else { col_width.saturating_sub(2) };
+            let label = format!("{}{}", truncate_for_width(col, max_name), indicator);
+
+            let style = if i == app.explain_selected_col {
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)
+            } else {
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            };
+            Cell::from(label).style(style)
         })
         .collect();
     let header = Row::new(header_cells).height(1);
 
-    // Build rows with scroll offset
-    let visible_height = area.height.saturating_sub(3) as usize; // Account for header and borders
-    let start_idx = scroll;
-    let end_idx = (scroll + visible_height).min(explain_data.rows.len());
+    // Use sorted indices for row ordering
+    let indices = &app.explain_sorted_indices;
+    let visible_height = area.height.saturating_sub(3) as usize;
+    let total_rows = indices.len();
+    let start_idx = app.explain_scroll;
+    let end_idx = (start_idx + visible_height).min(total_rows);
 
-    let rows: Vec<Row> = explain_data.rows[start_idx..end_idx]
+    let rows: Vec<Row> = indices[start_idx..end_idx]
         .iter()
-        .enumerate()
-        .map(|(i, row)| {
+        .map(|&row_idx| {
+            let row = &explain_data.rows[row_idx];
             let cells: Vec<Cell> = row
                 .iter()
                 .enumerate()
                 .map(|(col_idx, val)| {
                     let text = value_to_string(val);
                     let formatted = if col_idx < explain_data.columns.len() {
-                        // Try to format numeric values based on column name
                         if let Some(num) = val.as_f64() {
                             format_value(num, &explain_data.columns[col_idx])
                         } else {
@@ -161,23 +174,13 @@ fn render_table(f: &mut Frame, area: Rect, explain_data: &ExplainData, scroll: u
                     } else {
                         truncate_for_width(&text, col_width)
                     };
-
                     Cell::from(formatted).style(Style::default().fg(Color::White))
                 })
                 .collect();
-
-            // Highlight selected row
-            let style = if i == 0 && scroll == start_idx {
-                Style::default().bg(Color::DarkGray)
-            } else {
-                Style::default()
-            };
-
-            Row::new(cells).style(style)
+            Row::new(cells)
         })
         .collect();
 
-    // Calculate widths constraint
     let widths: Vec<Constraint> = (0..col_count)
         .map(|_| Constraint::Length(col_width as u16))
         .collect();

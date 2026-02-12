@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Drill-down query template for explaining data points
 #[derive(Debug, Clone, Deserialize)]
@@ -73,6 +74,18 @@ pub struct ChartData {
     pub explain_data: Option<ExplainData>,
     /// Database name for drill-down queries (e.g., "orb_data_export")
     pub database: Option<String>,
+    /// Timestamp in milliseconds (Date.now() from JS)
+    pub timestamp: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryEntry {
+    pub path: PathBuf,
+    pub title: String,
+    pub timestamp: u64,
+    pub row_count: usize,
+    #[allow(dead_code)]
+    pub chart_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

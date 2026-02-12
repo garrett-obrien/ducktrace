@@ -1,9 +1,9 @@
 use crossterm::event::{KeyCode, KeyEvent, MouseEvent, MouseEventKind};
 use log::{debug, info};
 
-use crate::data::{ChartData, ExplainData};
+use crate::data::{ChartData, ExplainData, HistoryEntry};
 use crate::ui::query::get_query_line_count;
-use crate::watcher::get_data_path;
+use crate::watcher::{get_data_path, load_data, load_history_entries};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -49,8 +49,15 @@ pub struct App {
     pub explain_loading: bool,
     pub explain_error: Option<String>,
     pub explain_scroll: usize,
+    pub explain_selected_col: usize,
+    pub explain_sort_column: Option<usize>,
+    pub explain_sort_asc: bool,
+    pub explain_sorted_indices: Vec<usize>,
     /// Pending drill-down query to execute (polled by main loop)
     pending_drill_down_query: Option<String>,
+    // History state for Home tab data selector
+    pub history: Vec<HistoryEntry>,
+    pub history_selected: usize,
 }
 
 impl App {
@@ -68,7 +75,13 @@ impl App {
             explain_loading: false,
             explain_error: None,
             explain_scroll: 0,
+            explain_selected_col: 0,
+            explain_sort_column: None,
+            explain_sort_asc: true,
+            explain_sorted_indices: Vec::new(),
             pending_drill_down_query: None,
+            history: Vec::new(),
+            history_selected: 0,
         }
     }
 
@@ -106,27 +119,41 @@ impl App {
                     self.explain_scroll = self.explain_scroll.saturating_sub(1);
                 }
                 KeyCode::Down => {
-                    if let Some(ref explain_data) = self.explain_data {
-                        let max_scroll = explain_data.rows.len().saturating_sub(1);
-                        self.explain_scroll = (self.explain_scroll + 1).min(max_scroll);
-                    }
+                    let max_scroll = self.explain_sorted_indices.len().saturating_sub(1);
+                    self.explain_scroll = (self.explain_scroll + 1).min(max_scroll);
                 }
                 KeyCode::PageUp => {
                     self.explain_scroll = self.explain_scroll.saturating_sub(10);
                 }
                 KeyCode::PageDown => {
-                    if let Some(ref explain_data) = self.explain_data {
-                        let max_scroll = explain_data.rows.len().saturating_sub(1);
-                        self.explain_scroll = (self.explain_scroll + 10).min(max_scroll);
-                    }
+                    let max_scroll = self.explain_sorted_indices.len().saturating_sub(1);
+                    self.explain_scroll = (self.explain_scroll + 10).min(max_scroll);
                 }
                 KeyCode::Home => {
                     self.explain_scroll = 0;
                 }
                 KeyCode::End => {
-                    if let Some(ref explain_data) = self.explain_data {
-                        self.explain_scroll = explain_data.rows.len().saturating_sub(1);
+                    let max_scroll = self.explain_sorted_indices.len().saturating_sub(1);
+                    self.explain_scroll = max_scroll;
+                }
+                KeyCode::Left => {
+                    if let Some(ref data) = self.explain_data {
+                        let cols = data.columns.len();
+                        if cols > 0 {
+                            self.explain_selected_col = (self.explain_selected_col + cols - 1) % cols;
+                        }
                     }
+                }
+                KeyCode::Right => {
+                    if let Some(ref data) = self.explain_data {
+                        let cols = data.columns.len();
+                        if cols > 0 {
+                            self.explain_selected_col = (self.explain_selected_col + 1) % cols;
+                        }
+                    }
+                }
+                KeyCode::Enter => {
+                    self.toggle_explain_sort();
                 }
                 _ => {}
             }
@@ -139,10 +166,22 @@ impl App {
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Left => self.active_tab = self.active_tab.prev(),
             KeyCode::Right => self.active_tab = self.active_tab.next(),
-            // Explain selected point
-            KeyCode::Char('x') | KeyCode::Enter => {
+            // Explain selected point / load history entry
+            KeyCode::Char('x') => {
                 if matches!(self.active_tab, Tab::Chart | Tab::Data) {
                     self.trigger_explain();
+                }
+            }
+            KeyCode::Enter => {
+                if matches!(self.active_tab, Tab::Chart | Tab::Data) {
+                    self.trigger_explain();
+                } else if self.active_tab == Tab::Home {
+                    self.load_history_entry();
+                }
+            }
+            KeyCode::Char('d') | KeyCode::Delete => {
+                if self.active_tab == Tab::Home {
+                    self.delete_history_entry();
                 }
             }
             KeyCode::Up => self.handle_up(),
@@ -259,9 +298,57 @@ impl App {
 
     /// Handle successful drill-down result
     pub fn on_drill_down_success(&mut self, data: ExplainData) {
+        let row_count = data.rows.len();
         self.explain_data = Some(data);
         self.explain_loading = false;
         self.explain_error = None;
+        self.explain_selected_col = 0;
+        self.explain_sort_column = None;
+        self.explain_sort_asc = true;
+        self.explain_sorted_indices = (0..row_count).collect();
+    }
+
+    fn toggle_explain_sort(&mut self) {
+        let col = self.explain_selected_col;
+        if let Some(current) = self.explain_sort_column {
+            if current == col {
+                if self.explain_sort_asc {
+                    // Was ascending, flip to descending
+                    self.explain_sort_asc = false;
+                } else {
+                    // Was descending, clear sort
+                    self.explain_sort_column = None;
+                    if let Some(ref data) = self.explain_data {
+                        self.explain_sorted_indices = (0..data.rows.len()).collect();
+                    }
+                    self.explain_scroll = 0;
+                    return;
+                }
+            } else {
+                self.explain_sort_column = Some(col);
+                self.explain_sort_asc = true;
+            }
+        } else {
+            self.explain_sort_column = Some(col);
+            self.explain_sort_asc = true;
+        }
+        self.apply_explain_sort();
+        self.explain_scroll = 0;
+    }
+
+    fn apply_explain_sort(&mut self) {
+        let Some(ref data) = self.explain_data else { return };
+        let Some(col) = self.explain_sort_column else { return };
+        let asc = self.explain_sort_asc;
+
+        let mut indices: Vec<usize> = (0..data.rows.len()).collect();
+        indices.sort_by(|&a, &b| {
+            let va = data.rows[a].get(col);
+            let vb = data.rows[b].get(col);
+            let ord = cmp_json_values(va, vb);
+            if asc { ord } else { ord.reverse() }
+        });
+        self.explain_sorted_indices = indices;
     }
 
     /// Handle drill-down error
@@ -277,6 +364,10 @@ impl App {
         self.explain_loading = false;
         self.explain_error = None;
         self.explain_scroll = 0;
+        self.explain_selected_col = 0;
+        self.explain_sort_column = None;
+        self.explain_sort_asc = true;
+        self.explain_sorted_indices = Vec::new();
         self.pending_drill_down_query = None;
     }
 
@@ -301,6 +392,18 @@ impl App {
 
     fn handle_scroll(&mut self, delta: i32) {
         match self.active_tab {
+            Tab::Home => {
+                let len = self.history.len();
+                if len > 0 {
+                    if delta < 0 {
+                        self.history_selected =
+                            self.history_selected.saturating_sub((-delta) as usize);
+                    } else {
+                        self.history_selected =
+                            (self.history_selected + delta as usize).min(len - 1);
+                    }
+                }
+            }
             Tab::Query => {
                 if let Some(ref data) = self.data {
                     let max_scroll = get_query_line_count(data).saturating_sub(1);
@@ -331,6 +434,12 @@ impl App {
 
     fn handle_up(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                let len = self.history.len();
+                if len > 0 {
+                    self.history_selected = (self.history_selected + len - 1) % len;
+                }
+            }
             Tab::Query => {
                 self.scroll_offset = self.scroll_offset.saturating_sub(1);
             }
@@ -348,6 +457,12 @@ impl App {
 
     fn handle_down(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                let len = self.history.len();
+                if len > 0 {
+                    self.history_selected = (self.history_selected + 1) % len;
+                }
+            }
             Tab::Query => {
                 if let Some(ref data) = self.data {
                     let max_scroll = get_query_line_count(data).saturating_sub(1);
@@ -368,6 +483,9 @@ impl App {
 
     fn handle_home(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                self.history_selected = 0;
+            }
             Tab::Query => {
                 self.scroll_offset = 0;
             }
@@ -380,6 +498,11 @@ impl App {
 
     fn handle_end(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                if !self.history.is_empty() {
+                    self.history_selected = self.history.len() - 1;
+                }
+            }
             Tab::Query => {
                 if let Some(ref data) = self.data {
                     self.scroll_offset = get_query_line_count(data).saturating_sub(1);
@@ -398,6 +521,9 @@ impl App {
 
     fn handle_page_up(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                self.history_selected = self.history_selected.saturating_sub(10);
+            }
             Tab::Query => {
                 self.scroll_offset = self.scroll_offset.saturating_sub(10);
             }
@@ -415,6 +541,12 @@ impl App {
 
     fn handle_page_down(&mut self) {
         match self.active_tab {
+            Tab::Home => {
+                let len = self.history.len();
+                if len > 0 {
+                    self.history_selected = (self.history_selected + 10).min(len - 1);
+                }
+            }
             Tab::Query => {
                 if let Some(ref data) = self.data {
                     let max_scroll = get_query_line_count(data).saturating_sub(1);
@@ -433,6 +565,34 @@ impl App {
         }
     }
 
+    pub fn refresh_history(&mut self) {
+        self.history = load_history_entries();
+        if !self.history.is_empty() {
+            self.history_selected = self.history_selected.min(self.history.len() - 1);
+        } else {
+            self.history_selected = 0;
+        }
+    }
+
+    fn delete_history_entry(&mut self) {
+        if self.history_selected >= self.history.len() {
+            return;
+        }
+        let entry = &self.history[self.history_selected];
+        let _ = std::fs::remove_file(&entry.path);
+        self.refresh_history();
+    }
+
+    fn load_history_entry(&mut self) {
+        if self.history_selected >= self.history.len() {
+            return;
+        }
+        let entry = &self.history[self.history_selected];
+        if let Ok(data) = load_data(&entry.path) {
+            self.on_data_update(data);
+        }
+    }
+
     pub fn tick(&mut self) {
         self.frame = self.frame.wrapping_add(1);
     }
@@ -441,5 +601,48 @@ impl App {
 impl Default for App {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Compare two optional JSON values for sorting.
+/// Numbers sort numerically, strings lexicographically, nulls sort last.
+fn cmp_json_values(
+    a: Option<&serde_json::Value>,
+    b: Option<&serde_json::Value>,
+) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    match (a, b) {
+        (None, None) => Ordering::Equal,
+        (None, Some(_)) => Ordering::Greater,
+        (Some(_), None) => Ordering::Less,
+        (Some(serde_json::Value::Null), Some(serde_json::Value::Null)) => Ordering::Equal,
+        (Some(serde_json::Value::Null), _) => Ordering::Greater,
+        (_, Some(serde_json::Value::Null)) => Ordering::Less,
+        (Some(va), Some(vb)) => {
+            // Try numeric comparison first
+            if let (Some(na), Some(nb)) = (as_f64(va), as_f64(vb)) {
+                return na.partial_cmp(&nb).unwrap_or(Ordering::Equal);
+            }
+            // Fall back to string comparison
+            let sa = val_to_str(va);
+            let sb = val_to_str(vb);
+            sa.cmp(&sb)
+        }
+    }
+}
+
+fn as_f64(v: &serde_json::Value) -> Option<f64> {
+    match v {
+        serde_json::Value::Number(n) => n.as_f64(),
+        serde_json::Value::String(s) => s.parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+fn val_to_str(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => s.clone(),
+        _ => v.to_string(),
     }
 }

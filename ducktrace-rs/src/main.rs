@@ -58,6 +58,7 @@ async fn main() -> Result<()> {
 
     // Create app state
     let mut app = App::new();
+    app.refresh_history();
 
     // Set up event channel
     let (tx, mut rx) = mpsc::channel::<AppEvent>(32);
@@ -186,7 +187,10 @@ async fn main() -> Result<()> {
             match event {
                 AppEvent::Key(key) => app.handle_key(key),
                 AppEvent::Mouse(mouse) => app.handle_mouse(mouse),
-                AppEvent::FileChange(data) => app.on_data_update(*data),
+                AppEvent::FileChange(data) => {
+                    app.on_data_update(*data);
+                    app.refresh_history();
+                }
                 AppEvent::DrillDownResult(result) => match result {
                     Ok(data) => app.on_drill_down_success(data),
                     Err(e) => app.on_drill_down_error(e),
