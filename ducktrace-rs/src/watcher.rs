@@ -13,10 +13,12 @@ pub fn get_data_path() -> PathBuf {
         .join(".claude/ducktrace/current.json")
 }
 
-/// Load chart data from the file
+/// Load chart data from the file, applying row limits and timestamp
 pub fn load_data(path: &PathBuf) -> Result<ChartData> {
     let content = std::fs::read_to_string(path)?;
-    let data: ChartData = serde_json::from_str(&content)?;
+    let mut data: ChartData = serde_json::from_str(&content)?;
+    data.apply_row_limit();
+    data.ensure_timestamp();
     Ok(data)
 }
 
@@ -58,6 +60,56 @@ pub fn load_history_entries() -> Vec<HistoryEntry> {
     history.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
     history.truncate(20);
     history
+}
+
+/// Archive current.json into the history directory, rotating to keep 20
+fn archive_to_history(data_path: &PathBuf) {
+    let history_dir = get_history_dir();
+    if std::fs::create_dir_all(&history_dir).is_err() {
+        return;
+    }
+
+    let content = match std::fs::read_to_string(data_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // Parse to get timestamp for the filename
+    let data: ChartData = match serde_json::from_str(&content) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    let ts = data.timestamp.unwrap_or_else(|| {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    });
+
+    let history_file = history_dir.join(format!("{}.json", ts));
+    if std::fs::write(&history_file, &content).is_err() {
+        return;
+    }
+
+    // Rotate: keep only the 20 most recent
+    if let Ok(entries) = std::fs::read_dir(&history_dir) {
+        let mut files: Vec<_> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    == Some("json")
+            })
+            .map(|e| e.path())
+            .collect();
+        files.sort();
+        files.reverse();
+        for old in files.into_iter().skip(20) {
+            let _ = std::fs::remove_file(old);
+        }
+    }
 }
 
 /// Watch the data file and send updates through the channel
@@ -106,6 +158,7 @@ pub async fn watch_file(tx: mpsc::Sender<ChartData>) -> Result<()> {
                 tokio::time::sleep(Duration::from_millis(50)).await;
 
                 if let Ok(data) = load_data(&path) {
+                    archive_to_history(&path);
                     let _ = tx.send(data).await;
                 }
             }

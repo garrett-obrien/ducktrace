@@ -20,9 +20,6 @@ cd ducktrace-rs && cargo clippy
 
 # Run tests
 cd ducktrace-rs && cargo test
-
-# Skill entry point (JSON arg, used by Claude Code)
-node src/ducktrace-mcp.js '<JSON config>'
 ```
 
 ## Environment Setup
@@ -39,18 +36,15 @@ echo "MOTHERDUCK_TOKEN=your_token_here" > .env
 
 **Terminal (TUI)** — `ducktrace-rs/` — Rust/ratatui with mouse support, auto-refresh, and drill-down queries via DuckDB.
 
-### Key Entry Points
-
-- `src/ducktrace-mcp.js` — Primary entry point for Claude Code skill invocation. Takes a single JSON argument with chart config + MCP response data. Writes TUI data to `~/.claude/ducktrace/current.json`.
-
 ### Data Flow
 
 ```
-MotherDuck MCP query → ducktrace-mcp.js → ~/.claude/ducktrace/current.json
-                                                             ↓
-                                              TUI watches and auto-refreshes
-                                                             ↓
-                                              User presses 'x' → drill-down query via DuckDB
+Claude Code skill writes JSON → ~/.claude/ducktrace/current.json
+                                                   ↓
+                                    TUI watches and auto-refreshes
+                                    (applies row limits, timestamps, archives to history)
+                                                   ↓
+                                    User presses 'x' → drill-down query via DuckDB
 ```
 
 ### Project Structure
@@ -60,20 +54,17 @@ ducktrace/
 ├── CLAUDE.md
 ├── SKILL.md                # Claude Code skill definition (triggers, workflow, examples)
 ├── README.md
-├── package.json            # Node.js config (type: module)
 ├── .gitignore
-├── src/
-│   └── ducktrace-mcp.js    # Skill entry point (JSON arg → TUI data)
 └── ducktrace-rs/
     ├── Cargo.toml          # ratatui, crossterm, duckdb, tokio, notify, serde
     └── src/
         ├── main.rs         # Entry point, async runtime, event loop
         ├── app.rs          # App state, Tab enum (Home/Query/Mask/Data/Chart), keyboard + mouse handling
         ├── db.rs           # MotherDuck connection via DuckDB for drill-down queries
-        ├── watcher.rs      # File watcher (notify crate)
+        ├── watcher.rs      # File watcher (notify crate), history archiving
         ├── data/
         │   ├── mod.rs
-        │   ├── model.rs    # ChartData struct, chart type inference
+        │   ├── model.rs    # ChartData struct, chart type inference, row limits
         │   └── format.rs   # Number/currency formatting
         └── ui/
             ├── mod.rs      # Main render function, layout, Home tab (splash + status)
@@ -93,7 +84,9 @@ Auto-inferred from data, or set explicitly via `"chart_type"`:
 - **bar** — Categorical X with numeric Y
 - **scatter** — Two numeric columns
 
-### Config Format (ducktrace-mcp.js)
+### Config Format
+
+Written directly to `~/.claude/ducktrace/current.json` by the skill via bash heredoc.
 
 ```json
 {
@@ -105,7 +98,7 @@ Auto-inferred from data, or set explicitly via `"chart_type"`:
   "columns": ["col1", "col2"],
   "rows": [["val1", 100], ["val2", 200]],
   "chart_type": "line",
-  "drillDown": {
+  "drill_down": {
     "description": "Show detail rows",
     "query_template": "SELECT * FROM {{database}}.table WHERE x = '{{x}}' LIMIT 100",
     "param_mapping": {"x": "x_column_name"}
@@ -113,7 +106,7 @@ Auto-inferred from data, or set explicitly via `"chart_type"`:
 }
 ```
 
-Required fields: `title`, `x`, `y`, `query`, `columns`, `rows`. Row limit: 50 (auto-truncated).
+Required fields: `title`, `x`, `y`, `query`, `columns`, `rows`. The TUI auto-truncates rows beyond 50 and adds a timestamp if missing.
 
 ### TUI Data File
 
@@ -154,4 +147,3 @@ The Query tab features syntax highlighting:
 ## Key Dependencies
 
 **Rust TUI:** ratatui 0.29, crossterm 0.28, duckdb 1.4 (bundled), tokio, notify 7, serde
-**Node.js:** ES modules (`"type": "module"` in package.json), no runtime dependencies

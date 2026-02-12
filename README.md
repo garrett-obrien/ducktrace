@@ -38,7 +38,6 @@ Each chart run is also saved to a history directory. The Home tab lists recent a
 - [Claude Code](https://claude.ai/code) CLI
 - [MotherDuck MCP](https://github.com/motherduckdb/mcp-server-motherduck) configured in Claude Code
 - Rust (for building the TUI)
-- Node.js 18+
 
 ## Setup
 
@@ -111,12 +110,9 @@ ducktrace-rs/
 │   ├── main.rs         # Entry point, event loop
 │   ├── app.rs          # App state, input handling
 │   ├── db.rs           # MotherDuck drill-down queries
-│   ├── watcher.rs      # File watcher
-│   ├── data/           # Data models
+│   ├── watcher.rs      # File watcher, history archiving
+│   ├── data/           # Data models, row limits
 │   └── ui/             # UI components
-
-src/
-└── ducktrace-mcp.js        # Claude Code skill entry point
 ```
 
 ## License

@@ -1,8 +1,0 @@
-{
-  "name": "ducktrace",
-  "version": "1.0.0",
-  "description": "Interactive charts with data lineage - trace any data point back to your SQL query",
-  "type": "module",
-  "scripts": {},
-  "devDependencies": {}
-}

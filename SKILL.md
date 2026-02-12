@@ -71,30 +71,35 @@ MotherDuck:query(database="<db>", sql="<query>")
 
 Response contains `columns` (array of names) and `rows` (array of arrays).
 
-### Step 3: Generate Chart
+### Step 3: Write Chart Data
 
-Pass the MCP response directly to the generator as a single JSON config:
+Write the JSON config directly to the TUI data file. The TUI handles row truncation (50 max) and timestamping automatically.
 
 ```bash
-node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '<JSON>'
-```
-
-The JSON config combines chart params with MCP response:
-
-```json
+mkdir -p ~/.claude/ducktrace && cat > ~/.claude/ducktrace/current.json << 'EOF'
 {
   "title": "Chart Title",
-  "x": "x_field_name",
-  "y": "y_field_name",
+  "x": "x_column_name",
+  "y": "y_column_name",
   "query": "SELECT ... (the SQL you ran)",
+  "database": "db_name",
   "columns": ["col1", "col2"],
   "rows": [["val1", 100], ["val2", 200]],
+  "chart_type": "line",
+  "drill_down": {
+    "description": "Show detail rows",
+    "query_template": "SELECT * FROM {{database}}.table WHERE col = '{{x}}' LIMIT 100",
+    "param_mapping": {"x": "x_column_name"}
+  }
 }
+EOF
 ```
+
+Keep rows under 50 for optimal display — the TUI will truncate if needed.
 
 ### Step 4: Output Results
 
-The generator writes data to `~/.claude/ducktrace/current.json`. If the user has the TUI running in a split terminal, it will automatically refresh to show the new chart. Confirm the chart was generated and remind the user to check their TUI pane.
+The data file at `~/.claude/ducktrace/current.json` is watched by the TUI, which auto-refreshes when it changes. The TUI also archives each chart to history automatically. Confirm the chart was generated and remind the user to check their TUI pane.
 
 ## Complete Example (TUI - Default)
 
@@ -116,16 +121,18 @@ User: "show me revenue by month for 2025 with explain chart"
    }
    ```
 
-3. **Claude runs generator (no output path = TUI only):**
+3. **Claude writes chart data:**
    ```bash
-   node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '{
+   mkdir -p ~/.claude/ducktrace && cat > ~/.claude/ducktrace/current.json << 'EOF'
+   {
      "title": "2025 Revenue by Month",
      "x": "month",
      "y": "revenue",
      "query": "SELECT strftime(date_trunc('month', order_date), '%Y-%m') AS month, SUM(amount) AS revenue FROM orders WHERE order_date >= '2025-01-01' GROUP BY 1 ORDER BY 1",
      "columns": ["month", "revenue"],
      "rows": [["2025-01", 19000097.60], ["2025-02", 18457859.77]]
-   }'
+   }
+   EOF
    ```
 
 4. **Claude confirms:** "Chart generated! Check your TUI pane to explore the data."
@@ -141,8 +148,8 @@ User: "show me revenue by month for 2025 with explain chart"
 | `database` | Yes | Database name for drill-down queries |
 | `columns` | Yes | Column names from MCP response |
 | `rows` | Yes | Row data from MCP response |
-| `chart_type` | No | Chart type: "line", "bar", or "scatter". Auto-inferred if omitted (dates->line, categorical->bar, numeric x numeric->scatter). |
-| `drillDown` | No | Drill-down template for explaining data points. See Drill-Down Templates section. |
+| `chart_type` | No | Chart type: `"line"`, `"bar"`, or `"scatter"`. Auto-inferred if omitted (dates->line, categorical->bar, numeric x numeric->scatter). |
+| `drill_down` | No | Drill-down template for explaining data points. See Drill-Down Templates section. |
 
 ## Output
 
@@ -196,7 +203,7 @@ Then generate a template that retrieves the underlying rows for a selected data 
 
 ```json
 {
-  "drillDown": {
+  "drill_down": {
     "description": "Human-readable description of what this shows",
     "query_template": "SELECT * FROM {{database}}.table WHERE condition = '{{x}}' LIMIT 100",
     "param_mapping": {
@@ -230,7 +237,7 @@ ORDER BY 1
 Drill-down template:
 ```json
 {
-  "drillDown": {
+  "drill_down": {
     "description": "Show orders for selected month",
     "query_template": "SELECT order_id, order_date, customer_name, amount FROM {{database}}.orders WHERE strftime('%Y-%m', order_date) = '{{x}}' ORDER BY amount DESC LIMIT 100",
     "param_mapping": {"x": "month"}
@@ -251,7 +258,7 @@ GROUP BY 1
 Drill-down template:
 ```json
 {
-  "drillDown": {
+  "drill_down": {
     "description": "Show orders for selected category",
     "query_template": "SELECT p.product_name, oi.quantity, oi.unit_price FROM {{database}}.products p JOIN {{database}}.order_items oi USING (product_id) WHERE p.category = '{{x}}' LIMIT 100",
     "param_mapping": {"x": "category"}
@@ -271,7 +278,7 @@ GROUP BY 1
 Drill-down template:
 ```json
 {
-  "drillDown": {
+  "drill_down": {
     "description": "Show customers in selected segment",
     "query_template": "SELECT customer_name, email, total_spent FROM {{database}}.customers WHERE customer_segment = '{{x}}' ORDER BY total_spent DESC LIMIT 100",
     "param_mapping": {"x": "customer_segment"}
@@ -300,22 +307,24 @@ User: "show me revenue by month for 2025 with explain chart"
    )
    ```
 
-2. **Claude runs generator with drill-down:**
+2. **Claude writes chart data with drill-down:**
    ```bash
-   node /mnt/skills/user/ducktrace/src/ducktrace-mcp.js '{
+   mkdir -p ~/.claude/ducktrace && cat > ~/.claude/ducktrace/current.json << 'EOF'
+   {
      "title": "2025 Revenue by Month",
      "x": "month",
      "y": "revenue",
      "database": "sales_db",
-     "query": "SELECT strftime('\''%Y-%m'\'', order_date) AS month, SUM(amount) AS revenue FROM orders WHERE order_date >= '\''2025-01-01'\'' GROUP BY 1 ORDER BY 1",
+     "query": "SELECT strftime('%Y-%m', order_date) AS month, SUM(amount) AS revenue FROM orders WHERE order_date >= '2025-01-01' GROUP BY 1 ORDER BY 1",
      "columns": ["month", "revenue"],
      "rows": [["2025-01", 19000097.60], ["2025-02", 18457859.77]],
-     "drillDown": {
+     "drill_down": {
        "description": "Show orders for selected month",
-       "query_template": "SELECT order_id, order_date, customer_name, amount FROM {{database}}.orders WHERE strftime('\''%Y-%m'\'', order_date) = '\''{{x}}'\'' AND order_date >= '\''2025-01-01'\'' ORDER BY amount DESC LIMIT 100",
+       "query_template": "SELECT order_id, order_date, customer_name, amount FROM {{database}}.orders WHERE strftime('%Y-%m', order_date) = '{{x}}' AND order_date >= '2025-01-01' ORDER BY amount DESC LIMIT 100",
        "param_mapping": {"x": "month"}
      }
-   }'
+   }
+   EOF
    ```
 
 3. **User presses 'x' on January data point** → TUI executes:
@@ -333,5 +342,4 @@ User: "show me revenue by month for 2025 with explain chart"
 ## Requirements
 
 - MotherDuck MCP must be connected
-- Node.js available in environment (for skill entry point)
 - Rust TUI binary (`cargo build --release` in ducktrace-rs/)

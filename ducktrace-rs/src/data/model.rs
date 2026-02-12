@@ -1,9 +1,10 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Drill-down query template for explaining data points
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct DrillDown {
     /// Human-readable description of what the drill-down shows
     #[allow(dead_code)]
@@ -18,7 +19,7 @@ pub struct DrillDown {
 
 /// Lineage information about data aggregation
 #[allow(dead_code)]
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Lineage {
     /// Aggregation function used (SUM, COUNT, AVG, etc.)
@@ -32,7 +33,7 @@ pub struct Lineage {
 }
 
 /// Results from a drill-down query
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExplainData {
     /// Title for the explain panel
@@ -48,23 +49,25 @@ pub struct ExplainData {
     pub total_count: Option<usize>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChartData {
     pub title: String,
     pub query: String,
-    #[serde(alias = "xField")]
+    #[serde(alias = "x")]
     pub x_field: String,
-    #[serde(alias = "yField")]
+    #[serde(alias = "y")]
     pub y_field: String,
     pub columns: Vec<String>,
     pub rows: Vec<Vec<serde_json::Value>>,
+    #[serde(alias = "chart_type")]
     pub chart_type: Option<String>,
     pub status: Option<String>,
     #[allow(dead_code)]
     pub error_message: Option<String>,
     pub truncated_from: Option<usize>,
     /// Drill-down configuration for explaining data points
+    #[serde(alias = "drill_down")]
     pub drill_down: Option<DrillDown>,
     /// Data lineage information
     #[allow(dead_code)]
@@ -74,7 +77,7 @@ pub struct ChartData {
     pub explain_data: Option<ExplainData>,
     /// Database name for drill-down queries (e.g., "orb_data_export")
     pub database: Option<String>,
-    /// Timestamp in milliseconds (Date.now() from JS)
+    /// Timestamp in milliseconds
     pub timestamp: Option<u64>,
 }
 
@@ -95,7 +98,28 @@ pub enum ChartType {
     Scatter,
 }
 
+const MAX_ROWS: usize = 50;
+
 impl ChartData {
+    /// Truncate rows to MAX_ROWS, recording original count in `truncated_from`
+    pub fn apply_row_limit(&mut self) {
+        if self.rows.len() > MAX_ROWS {
+            self.truncated_from = Some(self.rows.len());
+            self.rows.truncate(MAX_ROWS);
+            self.status = Some("truncated".to_string());
+        }
+    }
+
+    /// Set timestamp to current time if not already present
+    pub fn ensure_timestamp(&mut self) {
+        if self.timestamp.is_none() {
+            self.timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .ok();
+        }
+    }
+
     /// Infer the chart type based on data characteristics
     pub fn infer_chart_type(&self) -> ChartType {
         // Check explicit chart_type first
@@ -198,5 +222,115 @@ pub fn value_to_f64(v: &serde_json::Value) -> f64 {
         serde_json::Value::Number(n) => n.as_f64().unwrap_or(0.0),
         serde_json::Value::String(s) => s.parse().unwrap_or(0.0),
         _ => 0.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_new_snake_case_format() {
+        let json = r#"{
+            "title": "Test",
+            "query": "SELECT 1",
+            "x": "month",
+            "y": "revenue",
+            "columns": ["month", "revenue"],
+            "rows": [["2025-01", 100]],
+            "chart_type": "line",
+            "drill_down": {
+                "description": "test",
+                "query_template": "SELECT 1",
+                "param_mapping": {"x": "month"}
+            }
+        }"#;
+        let data: ChartData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.x_field, "month");
+        assert_eq!(data.y_field, "revenue");
+        assert_eq!(data.chart_type.as_deref(), Some("line"));
+        assert!(data.drill_down.is_some());
+        assert_eq!(data.drill_down.unwrap().query_template, "SELECT 1");
+    }
+
+    #[test]
+    fn parse_old_camel_case_format() {
+        let json = r#"{
+            "title": "Test",
+            "query": "SELECT 1",
+            "xField": "month",
+            "yField": "revenue",
+            "columns": ["month", "revenue"],
+            "rows": [["2025-01", 100]],
+            "chartType": "bar",
+            "drillDown": {
+                "description": "test",
+                "queryTemplate": "SELECT 1",
+                "paramMapping": {"x": "month"}
+            }
+        }"#;
+        let data: ChartData = serde_json::from_str(json).unwrap();
+        assert_eq!(data.x_field, "month");
+        assert_eq!(data.y_field, "revenue");
+        assert_eq!(data.chart_type.as_deref(), Some("bar"));
+        assert!(data.drill_down.is_some());
+    }
+
+    #[test]
+    fn apply_row_limit_truncates() {
+        let json = r#"{
+            "title": "Test",
+            "query": "SELECT 1",
+            "x": "id",
+            "y": "val",
+            "columns": ["id", "val"],
+            "rows": []
+        }"#;
+        let mut data: ChartData = serde_json::from_str(json).unwrap();
+        // Add 60 rows
+        for i in 0..60 {
+            data.rows.push(vec![
+                serde_json::Value::Number(i.into()),
+                serde_json::Value::Number(i.into()),
+            ]);
+        }
+        assert_eq!(data.rows.len(), 60);
+        data.apply_row_limit();
+        assert_eq!(data.rows.len(), 50);
+        assert_eq!(data.truncated_from, Some(60));
+        assert_eq!(data.status.as_deref(), Some("truncated"));
+    }
+
+    #[test]
+    fn ensure_timestamp_sets_when_missing() {
+        let json = r#"{
+            "title": "Test",
+            "query": "SELECT 1",
+            "x": "id",
+            "y": "val",
+            "columns": ["id", "val"],
+            "rows": []
+        }"#;
+        let mut data: ChartData = serde_json::from_str(json).unwrap();
+        assert!(data.timestamp.is_none());
+        data.ensure_timestamp();
+        assert!(data.timestamp.is_some());
+        assert!(data.timestamp.unwrap() > 1_000_000_000_000); // millis
+    }
+
+    #[test]
+    fn ensure_timestamp_preserves_existing() {
+        let json = r#"{
+            "title": "Test",
+            "query": "SELECT 1",
+            "x": "id",
+            "y": "val",
+            "columns": ["id", "val"],
+            "rows": [],
+            "timestamp": 1234567890000
+        }"#;
+        let mut data: ChartData = serde_json::from_str(json).unwrap();
+        data.ensure_timestamp();
+        assert_eq!(data.timestamp, Some(1234567890000));
     }
 }
