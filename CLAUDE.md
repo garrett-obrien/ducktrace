@@ -27,11 +27,10 @@ node src/ducktrace-mcp.js '<JSON config>'
 
 ## Environment Setup
 
-Copy `.env.example` to `.env` and set your MotherDuck token. The TUI reads this for drill-down queries.
+Create a `.env` file with your MotherDuck token. The TUI reads this for drill-down queries.
 
 ```bash
-cp .env.example .env
-# Edit .env and set MOTHERDUCK_TOKEN
+echo "MOTHERDUCK_TOKEN=your_token_here" > .env
 ```
 
 ## Architecture
@@ -62,7 +61,6 @@ ducktrace/
 ├── SKILL.md                # Claude Code skill definition (triggers, workflow, examples)
 ├── README.md
 ├── package.json            # Node.js config (type: module)
-├── .env.example            # MOTHERDUCK_TOKEN template
 ├── .gitignore
 ├── src/
 │   └── ducktrace-mcp.js    # Skill entry point (JSON arg → TUI data)

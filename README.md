@@ -50,8 +50,7 @@ cd ducktrace
 cd ducktrace-rs && cargo build --release && cd ..
 
 # Set your MotherDuck token (needed for drill-down queries)
-cp .env.example .env
-# Edit .env and set MOTHERDUCK_TOKEN
+echo "MOTHERDUCK_TOKEN=your_token_here" > .env
 ```
 
 ## Usage
